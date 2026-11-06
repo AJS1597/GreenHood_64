@@ -57,6 +57,10 @@ BOW_COLORS = {
 }
 BOW_FALLBACK = (0.48, 0.33, 0.19, 1.0)
 
+# Exported sizes in metres so every scene starts from a sane scale.
+TARGET_GUARD_HEIGHT = 1.7
+TARGET_BOW_LENGTH = 1.25
+
 
 def log(message):
     print("[models] {}".format(message))
@@ -225,6 +229,11 @@ def export_guard():
         spear.parent_bone = "hand.R"
         spear.matrix_world = world
 
+    # Normalise the rig to a real-world height so every scene shares a scale.
+    minimum, maximum = bounds_of([guard])
+    height = max(maximum.z - minimum.z, 0.001)
+    armature.scale = (TARGET_GUARD_HEIGHT / height,) * 3
+
     render_preview("guard")
     keep = [o for o in (armature, guard, spear) if o is not None]
     select_only(keep)
@@ -243,6 +252,12 @@ def export_bow(tier_name, object_name):
     target.location = (0.0, 0.0, 0.0)
     delete_except([target.name])
     apply_palette(BOW_COLORS, BOW_FALLBACK, default_roughness=0.7)
+
+    # Normalise the stave length so tiers read at a consistent size.
+    minimum, maximum = bounds_of([target])
+    length = max(maximum.x - minimum.x, maximum.y - minimum.y, maximum.z - minimum.z, 0.001)
+    target.scale = (TARGET_BOW_LENGTH / length,) * 3
+
     select_only([target])
     render_preview(tier_name)
     export_glb(os.path.join(OUT_DIR, "{}.glb".format(tier_name)), animations=False)

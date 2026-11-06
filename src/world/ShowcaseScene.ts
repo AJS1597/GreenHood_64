@@ -153,9 +153,10 @@ export class ShowcaseScene {
   private buildGround(): void {
     const ground = MeshBuilder.CreateGround(
       'showcase-ground',
-      { width: 140, height: 140, subdivisions: 2 },
+      { width: 160, height: 160, subdivisions: 2 },
       this.scene,
     );
+    ground.position.y = -0.05;
     const material = new StandardMaterial('showcase-ground-mat', this.scene);
     material.diffuseColor = new Color3(0.16, 0.24, 0.15);
     material.specularColor = new Color3(0, 0, 0);

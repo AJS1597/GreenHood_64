@@ -31,7 +31,10 @@ export const SHOWCASE: readonly ShowcaseEntry[] = [
   { label: 'Floor Tile', kit: 'dungeon', name: 'template-floor' },
   { label: 'Wall', kit: 'dungeon', name: 'template-wall' },
   { label: 'Corridor', kit: 'dungeon', name: 'corridor' },
-  { label: 'Room (small)', kit: 'dungeon', name: 'room-small' },
+  { label: 'Room Small', kit: 'dungeon', name: 'room-small' },
+  { label: 'Room Medium', kit: 'dungeon', name: 'room-wide' },
+  { label: 'Room Large', kit: 'dungeon', name: 'room-large' },
+  { label: 'Room Corner', kit: 'dungeon', name: 'room-corner' },
   { label: 'Stairs', kit: 'dungeon', name: 'stairs' },
   { label: 'Gate', kit: 'dungeon', name: 'gate-door' },
 

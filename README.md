@@ -23,7 +23,18 @@ pnpm assets:models    # optional: re-export guard.glb + bow-tier-*.glb with Blen
 pnpm dev
 ```
 
-Open the printed URL. Add `?debug=1` for the debug HUD.
+Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for the development asset viewer.
+
+## Controls
+
+| Action | Key |
+| --- | --- |
+| Move | `W` `A` `S` `D` |
+| Look | Mouse |
+| Sprint | `Shift` |
+| Crouch | `Ctrl` |
+| Interact / shop | `E` |
+| Release mouse | `Esc` |
 
 ## Scripts
 

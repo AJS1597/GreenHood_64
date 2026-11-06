@@ -19,10 +19,42 @@
       </div>
     </div>
 
+    <div id="hud" hidden>
+      <div id="crosshair" class="crosshair"></div>
+      <div class="hud-wallet">
+        <span class="pill is-gold"><span id="hud-gold">0</span> gold</span>
+        <span class="pill is-crown"><span id="hud-crowns">0</span> crowns</span>
+      </div>
+      <div id="hud-prompt" class="hud-prompt" hidden><kbd>E</kbd> <span id="hud-prompt-text"></span></div>
+      <div id="hud-toast" class="hud-toast" hidden></div>
+      <div class="hud-hint">WASD move &middot; Mouse look &middot; Shift sprint &middot; Ctrl crouch &middot; E interact</div>
+    </div>
+
+    <div id="click-to-play" class="overlay click-overlay" hidden>
+      <div class="click-card">
+        <h2 id="click-title">Sherwood Camp</h2>
+        <p id="click-subtitle">Click to look around</p>
+        <p class="hint">WASD move &middot; Mouse look &middot; Shift sprint &middot; Ctrl crouch &middot; E interact</p>
+      </div>
+    </div>
+
+    <div id="shop" class="overlay shop-overlay" hidden>
+      <div class="shop-panel">
+        <header class="shop-header">
+          <h2 id="shop-title">Merchant</h2>
+          <button id="shop-close" class="shop-close" type="button">Close (Esc)</button>
+        </header>
+        <nav id="shop-tabs" class="shop-tabs"></nav>
+        <div id="shop-items" class="shop-items"></div>
+        <footer class="shop-footer"><span id="shop-wallet">Gold 0   Crowns 0</span></footer>
+      </div>
+    </div>
+
     <div id="debug-hud" class="debug-hud" hidden>
       <div><span class="debug-key">FPS</span> <span id="debug-fps">--</span></div>
       <div><span class="debug-key">Seed</span> <span id="debug-seed">--</span></div>
       <div><span class="debug-key">State</span> <span id="debug-state">--</span></div>
+      <div><span class="debug-key">Pos</span> <span id="debug-pos">--</span></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>
