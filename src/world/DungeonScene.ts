@@ -235,14 +235,14 @@ export class DungeonScene {
       rotationX: number,
       rotationY: number,
     ): boolean => {
-      if (!placed) {
-        base.position.set(x, y, z);
-        base.rotation.set(rotationX, rotationY, 0);
-        return true;
-      }
-      const instance = base.createInstance(`${base.name}-i${this.cloneCounter++}`);
-      instance.position.set(x, y, z);
-      instance.rotation.set(rotationX, rotationY, 0);
+      const target = placed
+        ? base.createInstance(`${base.name}-i${this.cloneCounter++}`)
+        : base;
+      // glTF clones come with a rotationQuaternion set, which overrides the
+      // euler `rotation`; clear it so yaw/pitch actually apply.
+      target.rotationQuaternion = null;
+      target.position.set(x, y, z);
+      target.rotation.set(rotationX, rotationY, 0);
       return true;
     };
 
