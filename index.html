@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="GreenHood 64 - a first-person Robin Hood stealth-archer dungeon crawler." />
+    <title>GreenHood 64</title>
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <canvas id="render-canvas" touch-action="none"></canvas>
+
+    <div id="loading-screen" class="overlay">
+      <div class="loading-panel">
+        <h1 class="game-title">GreenHood <span>64</span></h1>
+        <p class="loading-label" id="loading-label">Preparing the forest&hellip;</p>
+        <div class="loading-bar"><div class="loading-bar-fill" id="loading-bar-fill"></div></div>
+        <p class="loading-detail" id="loading-detail">0%</p>
+      </div>
+    </div>
+
+    <div id="debug-hud" class="debug-hud" hidden>
+      <div><span class="debug-key">FPS</span> <span id="debug-fps">--</span></div>
+      <div><span class="debug-key">Seed</span> <span id="debug-seed">--</span></div>
+      <div><span class="debug-key">State</span> <span id="debug-state">--</span></div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

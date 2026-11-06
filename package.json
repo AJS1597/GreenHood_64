@@ -1,0 +1,31 @@
+{
+  "name": "greenhood-64",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=20.19"
+  },
+  "description": "A first-person Robin Hood stealth-archer dungeon crawler built with Babylon.js, TypeScript, Vite and pnpm.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "assets:prepare": "node scripts/prepare-assets.mjs",
+    "assets:models": "blender -b --python scripts/export-models.py"
+  },
+  "dependencies": {
+    "@babylonjs/core": "9.35.0",
+    "@babylonjs/loaders": "9.35.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.6",
+    "typescript": "7.0.2",
+    "vite": "8.3.6",
+    "vitest": "5.1.0"
+  }
+}
