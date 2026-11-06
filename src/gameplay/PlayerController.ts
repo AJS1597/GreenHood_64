@@ -17,8 +17,6 @@ export interface PlayerTuning {
   sprintSpeed: number;
   crouchSpeed: number;
   acceleration: number;
-  bobFrequency: number;
-  bobAmplitude: number;
 }
 
 export const DEFAULT_PLAYER_TUNING: PlayerTuning = {
@@ -29,8 +27,6 @@ export const DEFAULT_PLAYER_TUNING: PlayerTuning = {
   sprintSpeed: 5.6,
   crouchSpeed: 1.6,
   acceleration: 14,
-  bobFrequency: 8.5,
-  bobAmplitude: 0.045,
 };
 
 /**
@@ -61,7 +57,6 @@ export class PlayerController {
   private pitch = 0;
   private velocityX = 0;
   private velocityZ = 0;
-  private bobPhase = 0;
   private currentEye: number;
   private crouching = false;
   private sprinting = false;
@@ -138,7 +133,6 @@ export class PlayerController {
     }
     this.updateCrouch();
     this.updateMovement(dt);
-    this.updateBob(dt);
     this.syncCamera(dt);
   }
 
@@ -247,15 +241,6 @@ export class PlayerController {
     this.z = resolved.z;
   }
 
-  private updateBob(dt: number): void {
-    const moving = this.speed > 0.4;
-    if (moving && this.settings.headBob && !this.crouching) {
-      this.bobPhase += dt * this.tuning.bobFrequency * (this.sprinting ? 1.25 : 1);
-    } else {
-      this.bobPhase += dt * 2;
-    }
-  }
-
   private decayVelocity(dt: number): void {
     const blend = 1 - Math.exp(-this.tuning.acceleration * dt);
     this.velocityX += (0 - this.velocityX) * blend;
@@ -266,12 +251,7 @@ export class PlayerController {
     const targetEye = this.crouching ? this.tuning.crouchEyeHeight : this.tuning.eyeHeight;
     this.currentEye += (targetEye - this.currentEye) * Math.min(1, dt * 12);
 
-    const moving = this.speed > 0.4 && this.settings.headBob && !this.crouching;
-    const bob = moving
-      ? Math.sin(this.bobPhase * Math.PI * 2) * this.tuning.bobAmplitude * Math.min(1, this.speed / 3)
-      : 0;
-
-    this.camera.position.set(this.x, this.baseY + this.currentEye + bob, this.z);
+    this.camera.position.set(this.x, this.baseY + this.currentEye, this.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 }

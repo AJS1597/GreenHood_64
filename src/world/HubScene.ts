@@ -4,6 +4,7 @@ import {
   DirectionalLight,
   DynamicTexture,
   HemisphericLight,
+  Light,
   MeshBuilder,
   Scene,
   ShadowGenerator,
@@ -14,6 +15,7 @@ import {
 import { createRng } from '../core/rng';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
 import type { AssetKit, AssetLibrary } from './AssetLibrary';
+import { createForestSky, type Sky } from './Skybox';
 
 /** A place the player can press E at. */
 export interface HubInteractable {
@@ -36,6 +38,7 @@ interface PlaceOptions {
 /** Fixed hub layout. Everything is in metres; the player spawns at +Z looking toward the gate. */
 const SPAWN = { x: 0, z: 16, yaw: Math.PI };
 const WORLD_BOUNDS: Bounds2 = { minX: -34, minZ: -34, maxX: 34, maxZ: 34 };
+const SUN_TRAVEL = new Vector3(-0.5, -1, 0.6);
 
 /**
  * The Sherwood camp: a safe, hand-authored clearing that never changes between
@@ -47,31 +50,41 @@ export class HubScene {
   readonly bounds = WORLD_BOUNDS;
   readonly colliders: Aabb2[] = [];
   readonly interactables: HubInteractable[] = [];
+  readonly root: TransformNode;
 
+  private readonly scene: Scene;
+  private readonly library: AssetLibrary;
+  private readonly lights: Light[] = [];
   private readonly shadow: ShadowGenerator;
+  private readonly sky: Sky;
 
-  constructor(
-    private readonly scene: Scene,
-    private readonly library: AssetLibrary,
-  ) {
-    const sky = new HemisphericLight('hub-sky', new Vector3(0.1, 1, -0.1), scene);
-    sky.intensity = 0.5;
-    sky.diffuse = new Color3(0.68, 0.8, 0.66);
-    sky.groundColor = new Color3(0.1, 0.14, 0.1);
+  constructor(scene: Scene, library: AssetLibrary) {
+    this.scene = scene;
+    this.library = library;
+    this.root = new TransformNode('hub-root', scene);
 
-    const sun = new DirectionalLight('hub-sun', new Vector3(-0.5, -1, 0.6), scene);
+    const skyLight = new HemisphericLight('hub-sky', new Vector3(0.1, 1, -0.1), scene);
+    skyLight.intensity = 0.66;
+    skyLight.diffuse = new Color3(0.76, 0.82, 0.86);
+    skyLight.groundColor = new Color3(0.16, 0.2, 0.15);
+
+    const sun = new DirectionalLight('hub-sun', SUN_TRAVEL, scene);
     sun.position = new Vector3(20, 34, -16);
-    sun.intensity = 1.15;
-    sun.diffuse = new Color3(1, 0.93, 0.78);
+    sun.intensity = 1.1;
+    sun.diffuse = new Color3(1, 0.95, 0.84);
+    this.lights.push(skyLight, sun);
 
     this.shadow = new ShadowGenerator(1024, sun);
     this.shadow.useBlurExponentialShadowMap = true;
     this.shadow.blurKernel = 18;
     this.shadow.darkness = 0.42;
 
+    this.sky = createForestSky(scene, SUN_TRAVEL.scale(-1));
+    this.sky.root.parent = this.root;
+
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogColor = new Color3(0.09, 0.14, 0.11);
-    scene.fogDensity = 0.016;
+    scene.fogColor = new Color3(0.8, 0.85, 0.88);
+    scene.fogDensity = 0.011;
   }
 
   async build(): Promise<void> {
@@ -81,8 +94,18 @@ export class HubScene {
     await this.buildStalls();
     await this.scatterForest();
 
-    // Keep the clearing clear of the road so the player always has a route.
     this.colliders.push(aabbFromCenter(0, -20.6, 5, 2));
+  }
+
+  /** Tear down every mesh, light and shadow this location added. */
+  dispose(): void {
+    this.sky.dispose();
+    this.shadow.dispose();
+    for (const light of this.lights) {
+      light.dispose();
+    }
+    this.lights.length = 0;
+    this.root.dispose(false, true);
   }
 
   /** Nearest interactable within its radius, or null. */
@@ -101,9 +124,10 @@ export class HubScene {
 
   private buildGround(): void {
     const ground = MeshBuilder.CreateGround('hub-ground', { width: 96, height: 96 }, this.scene);
+    ground.parent = this.root;
     ground.position.y = -0.06;
     const material = new StandardMaterial('hub-ground-mat', this.scene);
-    material.diffuseColor = new Color3(0.13, 0.2, 0.12);
+    material.diffuseColor = new Color3(0.2, 0.3, 0.18);
     material.specularColor = new Color3(0, 0, 0);
     ground.material = material;
     ground.receiveShadows = true;
@@ -137,24 +161,25 @@ export class HubScene {
 
   private async buildStalls(): Promise<void> {
     const stalls = [
-      { id: 'bows', label: 'Browse Bows', x: -8, z: 5, rotY: Math.PI / 2, kit: 'town', name: 'stall-red' },
-      { id: 'abilities', label: 'Learn Abilities', x: -8, z: -4, rotY: Math.PI / 2, kit: 'town', name: 'stall-green' },
-      { id: 'training', label: 'Train', x: 8, z: 5, rotY: -Math.PI / 2, kit: 'town', name: 'stall-green' },
-      { id: 'crowns', label: 'Crown Exchange', x: 8, z: -4, rotY: -Math.PI / 2, kit: 'town', name: 'stall-red' },
+      { id: 'bows', label: 'Bows', x: -8, z: 5, facing: Math.PI / 2, kit: 'town', name: 'stall-red' },
+      { id: 'abilities', label: 'Abilities', x: -8, z: -4, facing: Math.PI / 2, kit: 'town', name: 'stall-green' },
+      { id: 'training', label: 'Training', x: 8, z: 5, facing: -Math.PI / 2, kit: 'town', name: 'stall-green' },
+      { id: 'crowns', label: 'Crowns', x: 8, z: -4, facing: -Math.PI / 2, kit: 'town', name: 'stall-red' },
     ] as const;
 
     for (const stall of stalls) {
       await this.place(stall.kit, stall.name, stall.x, stall.z, {
         scale: 4.5,
-        rotY: stall.rotY,
+        rotY: stall.facing,
         collider: { halfX: 2.8, halfZ: 2.2 },
       });
-      // Flanking barrels.
       await this.place('mini', 'barrel', stall.x, stall.z - 2.6, { scale: 3.2, collider: { halfX: 0.9, halfZ: 0.9 } });
       await this.place('mini', 'barrel', stall.x, stall.z + 2.6, { scale: 3.2, collider: { halfX: 0.9, halfZ: 0.9 } });
 
-      const signX = stall.x + (stall.x < 0 ? 1.6 : -1.6);
-      this.addSign(stall.label.toUpperCase(), signX, 2.8, stall.z, stall.rotY);
+      // A plane faces -Z, so the sign uses the opposite rotation to the stall
+      // in order to face the road.
+      const signX = stall.x + (stall.x < 0 ? 1.7 : -1.7);
+      this.addSign(stall.label, signX, 2.7, stall.z, -stall.facing);
 
       this.interactables.push({
         id: stall.id,
@@ -165,7 +190,6 @@ export class HubScene {
       });
     }
 
-    // A little dressing around the market.
     await this.place('town', 'cart', -13, -8, { scale: 3, rotY: 0.6, collider: { halfX: 1.6, halfZ: 1.4 } });
     await this.place('mini', 'pot', -5.5, 6.5, { scale: 2.6, collider: { halfX: 0.6, halfZ: 0.6 } });
     await this.place('mini', 'pot', 5.5, 6.5, { scale: 2.6, collider: { halfX: 0.6, halfZ: 0.6 } });
@@ -241,6 +265,7 @@ export class HubScene {
       if (options.rotY) {
         node.rotation.y += options.rotY;
       }
+      node.parent = this.root;
     }
 
     for (const mesh of meshes) {
@@ -257,25 +282,45 @@ export class HubScene {
     return meshes;
   }
 
+  /**
+   * Draws a readable sign board. The font is auto-fitted so long labels are not
+   * cropped, and the caller supplies the rotation that faces the road.
+   */
   private addSign(text: string, x: number, y: number, z: number, rotY: number): void {
-    const plane = MeshBuilder.CreatePlane(`hub-sign-${text}`, { width: 2.6, height: 0.9 }, this.scene);
+    const width = 3.4;
+    const height = 1.05;
+    const texWidth = 512;
+    const texHeight = 160;
+
+    const plane = MeshBuilder.CreatePlane(`hub-sign-${text}`, { width, height }, this.scene);
+    plane.parent = this.root;
     plane.position.set(x, y, z);
     plane.rotation.y = rotY;
     plane.billboardMode = 0;
 
     const texture = new DynamicTexture(
       `hub-sign-tex-${text}`,
-      { width: 512, height: 180 },
+      { width: texWidth, height: texHeight },
       this.scene,
       false,
     );
-    texture.drawText(text, null, 120, 'bold 76px Segoe UI', '#f7e7bb', '#22331d', true);
+    const context = texture.getContext() as CanvasRenderingContext2D;
+    const padding = 26;
+    let fontSize = 88;
+    context.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+    while (context.measureText(text).width > texWidth - padding && fontSize > 22) {
+      fontSize -= 2;
+      context.font = `bold ${fontSize}px Segoe UI, sans-serif`;
+    }
+    const baseline = texHeight / 2 + fontSize * 0.34;
+    texture.drawText(text, null, baseline, `bold ${fontSize}px Segoe UI, sans-serif`, '#f7e7bb', '#243522', true);
 
     const material = new StandardMaterial(`hub-sign-mat-${text}`, this.scene);
     material.diffuseTexture = texture;
-    material.emissiveColor = new Color3(0.55, 0.55, 0.45);
+    material.emissiveColor = new Color3(0.5, 0.5, 0.42);
     material.specularColor = new Color3(0, 0, 0);
     material.backFaceCulling = false;
+    material.fogEnabled = false;
     plane.material = material;
   }
 }

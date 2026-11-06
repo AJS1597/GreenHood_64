@@ -218,36 +218,71 @@ kbd {
   color: var(--gold);
 }
 
-/* ---------- Click to play ---------- */
-.click-overlay {
-  backdrop-filter: blur(3px);
-  cursor: pointer;
+/* ---------- Resume hint (non-blocking) ---------- */
+.resume-hint {
+  position: fixed;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(3, 7, 5, 0.28);
 }
 
-.click-card {
+.resume-hint[hidden] {
+  display: none;
+}
+
+.resume-card {
   text-align: center;
-  padding: 26px 40px;
-  border-radius: 14px;
+  padding: 14px 26px;
+  border-radius: 10px;
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
 
-.click-card h2 {
-  margin: 0 0 4px;
-  font-size: 1.8rem;
+.resume-title {
+  margin: 0;
+  font-size: 1.3rem;
   color: var(--hood-green-bright);
 }
 
-.click-card p {
-  margin: 4px 0;
-  opacity: 0.85;
+.resume-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  opacity: 0.7;
 }
 
-.click-card .hint {
-  margin-top: 12px;
-  font-size: 0.78rem;
-  opacity: 0.5;
+/* ---------- Fade ---------- */
+.fade {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
+}
+
+.fade[hidden] {
+  display: none;
+}
+
+.fade.is-active {
+  opacity: 1;
+}
+
+.hud-floor {
+  position: absolute;
+  top: 14px;
+  left: 16px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  color: var(--gold);
+  letter-spacing: 0.06em;
 }
 
 /* ---------- Shop ---------- */

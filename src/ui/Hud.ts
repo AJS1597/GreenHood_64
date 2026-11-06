@@ -6,6 +6,7 @@ export class Hud {
   private readonly toast: HTMLElement;
   private readonly gold: HTMLElement;
   private readonly crowns: HTMLElement;
+  private readonly floor: HTMLElement;
   private toastTimer = 0;
 
   constructor(document: Document) {
@@ -15,6 +16,7 @@ export class Hud {
     this.toast = require(document, 'hud-toast');
     this.gold = require(document, 'hud-gold');
     this.crowns = require(document, 'hud-crowns');
+    this.floor = require(document, 'hud-floor');
   }
 
   show(): void {
@@ -37,6 +39,15 @@ export class Hud {
     }
     this.promptText.textContent = text;
     this.prompt.hidden = false;
+  }
+
+  setFloor(text: string | null): void {
+    if (!text) {
+      this.floor.hidden = true;
+      return;
+    }
+    this.floor.textContent = text;
+    this.floor.hidden = false;
   }
 
   showToast(text: string, durationMs = 2600): void {
