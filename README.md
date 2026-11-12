@@ -53,7 +53,7 @@ Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for th
 | Move | `W` `A` `S` `D` |
 | Look | Mouse |
 | Sprint | `Shift` |
-| Crouch | `Ctrl` |
+| Crouch | `C` |
 | Charge / fire bow | Hold / release `LMB` |
 | Aim / zoom | `RMB` |
 | Takedown guard | `E` while crouched behind an unaware guard |

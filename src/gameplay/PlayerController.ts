@@ -34,7 +34,7 @@ export const DEFAULT_PLAYER_TUNING: PlayerTuning = {
 /**
  * Pointer-locked first-person controller.
  *
- * Owns the camera transform, reads WASD / Shift / Ctrl, and resolves movement
+ * Owns the camera transform, reads WASD / Shift / C, and resolves movement
  * against a list of 2D boxes. The hub and the dungeon both drive it; they only
  * swap the collider list and bounds.
  */
@@ -212,7 +212,7 @@ export class PlayerController {
   }
 
   private updateCrouch(): void {
-    this.crouching = this.keys.has('ControlLeft') || this.keys.has('ControlRight');
+    this.crouching = this.keys.has('KeyC');
   }
 
   private updateMovement(dt: number): void {

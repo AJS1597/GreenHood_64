@@ -262,6 +262,7 @@ export class CombatSystem {
       if (event.button !== 0 || this.cooldown > 0) {
         return;
       }
+      // LMB charges and fires on its own; RMB is only the optional zoom.
       event.preventDefault();
       this.charging = true;
       this.chargeTime = 0;

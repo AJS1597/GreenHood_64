@@ -71,14 +71,17 @@ export class BowViewModel {
     this.recoil = Math.max(0, this.recoil - dt * 5);
     const aim = this.aiming ? 1 : 0;
     const draw = this.draw;
+    // Charging raises the bow toward the aim pose even without RMB, so a
+    // left-click-only draw has clear visual feedback.
+    const pose = Math.max(aim, draw * 0.45);
 
-    const targetPosition = Vector3.Lerp(this.restPosition, this.aimPosition, aim);
+    const targetPosition = Vector3.Lerp(this.restPosition, this.aimPosition, pose);
     targetPosition.z -= draw * 0.13;
     targetPosition.y += draw * 0.01;
     targetPosition.z += this.recoil * 0.06;
     targetPosition.y += this.recoil * 0.03;
 
-    const targetRotation = Vector3.Lerp(this.restRotation, this.aimRotation, aim);
+    const targetRotation = Vector3.Lerp(this.restRotation, this.aimRotation, pose);
     targetRotation.z += draw * 0.06;
     targetRotation.x -= this.recoil * 0.12;
 
