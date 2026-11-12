@@ -120,7 +120,7 @@ export class BowViewModel {
 
   dispose(): void {
     this.nockedRoot.dispose(false, false);
-    this.root.dispose(false, true);
+    this.root.dispose(false, false);
   }
 
   private async loadNockedArrow(): Promise<void> {
@@ -218,7 +218,7 @@ export class BowViewModel {
 
   private clear(): void {
     for (const child of this.root.getChildren()) {
-      child.dispose(false, true);
+      child.dispose(false, false);
     }
   }
 }

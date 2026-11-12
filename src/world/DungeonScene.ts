@@ -172,7 +172,8 @@ export class DungeonScene {
     this.guards.length = 0;
     this.lights.length = 0;
     this.lightPool.length = 0;
-    this.root.dispose(false, true);
+    // Shared kit materials/textures live in the AssetLibrary cache.
+    this.root.dispose(false, false);
   }
 
   get colliders(): Aabb2[] {
@@ -256,7 +257,7 @@ export class DungeonScene {
     if (index >= 0) {
       this.interactables.splice(index, 1);
     }
-    item.mesh?.dispose(false, true);
+    item.mesh?.dispose(false, false);
     item.mesh = null;
   }
 

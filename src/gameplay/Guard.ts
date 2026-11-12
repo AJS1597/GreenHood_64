@@ -338,7 +338,9 @@ export class Guard {
       group.dispose();
     }
     this.animations.clear();
-    this.root.dispose(false, true);
+    // Guard materials are instantiated clones, but their textures are shared
+    // with the cached guard container. Never dispose textures here.
+    this.root.dispose(false, false);
   }
 
   private updatePatrol(dt: number): void {
