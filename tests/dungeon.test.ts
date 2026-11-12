@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bfs, generateDungeon, isFloor, isPlayable, reachable } from '../src/core/dungeon';
+import { bfs, generateDungeon, isFloor, isPlayable, reachable, worldBoundsFor } from '../src/core/dungeon';
 
 function hashCells(cells: Uint8Array): number {
   let hash = 2166136261 >>> 0;
@@ -11,6 +11,11 @@ function hashCells(cells: Uint8Array): number {
 }
 
 describe('dungeon generation', () => {
+  it('uses half-tile playable bounds at the edge cells', () => {
+    const bounds = worldBoundsFor(23, 23, 4);
+    expect(bounds).toEqual({ minX: 2, minZ: 2, maxX: 86, maxZ: 86 });
+  });
+
   it('is deterministic for the same seed', () => {
     const a = generateDungeon(4242);
     const b = generateDungeon(4242);

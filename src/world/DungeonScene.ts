@@ -13,7 +13,7 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
-import { FLOOR, generateDungeon, isFloor, type Dungeon, type FloorLayout } from '../core/dungeon';
+import { FLOOR, generateDungeon, isFloor, worldBoundsFor, type Dungeon, type FloorLayout } from '../core/dungeon';
 import type { AssetLibrary } from './AssetLibrary';
 import { createCastleSky, type Sky } from './Skybox';
 
@@ -117,8 +117,24 @@ export class DungeonScene {
     this.floorRoots[1]!.parent = this.root;
 
     this.floors = [
-      { colliders: [], bounds: boundsFor(this.dungeon.floors[0]), torches: [] },
-      { colliders: [], bounds: boundsFor(this.dungeon.floors[1]), torches: [] },
+      {
+        colliders: [],
+        bounds: worldBoundsFor(
+          this.dungeon.floors[0].width,
+          this.dungeon.floors[0].height,
+          TILE,
+        ),
+        torches: [],
+      },
+      {
+        colliders: [],
+        bounds: worldBoundsFor(
+          this.dungeon.floors[1].width,
+          this.dungeon.floors[1].height,
+          TILE,
+        ),
+        torches: [],
+      },
     ];
   }
 
@@ -405,6 +421,8 @@ export class DungeonScene {
     const baseY = floorIndex * FLOOR_H;
     // The column asset is 1.1 m tall; stretch it to meet the ceiling.
     const columnScale = WALL_H / 1.1;
+    // The scaled column is about 1.89 m across; give it a solid footprint.
+    const columnHalf = 0.9;
     for (const room of layout.rooms) {
       const offset = Math.max(2.4, room.radius * TILE - 2.2);
       const corners = [
@@ -418,6 +436,11 @@ export class DungeonScene {
         if (column) {
           column.position = new Vector3(corner.x, baseY, corner.z);
           column.scaling.setAll(columnScale);
+          this.floors[floorIndex]!.colliders.push({
+            ...aabbFromCenter(corner.x, corner.z, columnHalf, columnHalf),
+            minY: baseY,
+            maxY: baseY + WALL_H,
+          });
         }
       }
       const banner = await this.cloneMesh('mini', 'banner', parent);
@@ -671,15 +694,6 @@ function setFloorCell(layout: FloorLayout, x: number, z: number): void {
   if (x > 0 && z > 0 && x < layout.width - 1 && z < layout.height - 1) {
     layout.cells[z * layout.width + x] = FLOOR;
   }
-}
-
-function boundsFor(layout: FloorLayout): Bounds2 {
-  return {
-    minX: TILE,
-    minZ: TILE,
-    maxX: (layout.width - 2) * TILE,
-    maxZ: (layout.height - 2) * TILE,
-  };
 }
 
 function firstMesh(meshes: AbstractMesh[] | undefined): Mesh | null {
