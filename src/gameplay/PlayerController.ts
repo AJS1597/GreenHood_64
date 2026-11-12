@@ -66,6 +66,7 @@ export class PlayerController {
   private velocityZ = 0;
   private currentEye: number;
   private feetY = 0;
+  private lastPointerMoveAt = 0;
   private crouching = false;
   private sprinting = false;
   private locked = false;
@@ -173,15 +174,34 @@ export class PlayerController {
     const onKeyUp = (event: KeyboardEvent): void => {
       this.keys.delete(event.code);
     };
-    const onMouseMove = (event: MouseEvent): void => {
+    const applyLook = (movementX: number, movementY: number): void => {
       if (!this.locked) {
         return;
       }
       const sensitivity = 0.0022 * this.settings.sensitivity;
-      this.yaw += event.movementX * sensitivity;
-      this.pitch += event.movementY * sensitivity * (this.settings.invertY ? -1 : 1);
+      this.yaw += movementX * sensitivity;
+      this.pitch += movementY * sensitivity * (this.settings.invertY ? -1 : 1);
       const limit = Math.PI / 2 - 0.05;
       this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+    };
+    const onPointerMove = (event: PointerEvent): void => {
+      if (event.pointerType && event.pointerType !== 'mouse') {
+        return;
+      }
+      if (event.movementX === 0 && event.movementY === 0) {
+        return;
+      }
+      this.lastPointerMoveAt = performance.now();
+      applyLook(event.movementX, event.movementY);
+    };
+    const onMouseMove = (event: MouseEvent): void => {
+      // Pointer events keep firing while a mouse button is held; compatibility
+      // mousemove can be suppressed during a drag/charge. Use mousemove only
+      // when pointermove is unavailable.
+      if (performance.now() - this.lastPointerMoveAt < 50) {
+        return;
+      }
+      applyLook(event.movementX, event.movementY);
     };
     const onLockChange = (): void => {
       this.locked = document.pointerLockElement === this.canvas;
@@ -198,6 +218,7 @@ export class PlayerController {
 
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
+    document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('pointerlockchange', onLockChange);
     this.canvas.addEventListener('contextmenu', onContextMenu);
@@ -205,6 +226,7 @@ export class PlayerController {
     this.disposers.push(
       () => window.removeEventListener('keydown', onKeyDown),
       () => window.removeEventListener('keyup', onKeyUp),
+      () => document.removeEventListener('pointermove', onPointerMove),
       () => document.removeEventListener('mousemove', onMouseMove),
       () => document.removeEventListener('pointerlockchange', onLockChange),
       () => this.canvas.removeEventListener('contextmenu', onContextMenu),
