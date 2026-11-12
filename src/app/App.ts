@@ -12,7 +12,7 @@ import { PlayerController } from '../gameplay/PlayerController';
 import { BowViewModel } from '../gameplay/BowViewModel';
 import { CombatSystem } from '../gameplay/CombatSystem';
 import { DEBUG } from '../core/config';
-import { playerMaxHealth } from '../core/combat';
+import { BOSS, playerMaxHealth } from '../core/combat';
 import { formatSeed, randomSeed } from '../core/rng';
 import type { ShopTab } from '../core/shop';
 import { SaveStore } from './SaveStore';
@@ -68,7 +68,7 @@ export class App {
   private runSeed = 0;
   private debugAt: string | null = null;
   private combatTest = false;
-  private testRespawnTimer = 0;
+  private outro = false;
 
   constructor(canvas: HTMLCanvasElement, document: Document) {
     this.loading = new LoadingScreen(document);
@@ -96,6 +96,9 @@ export class App {
     );
     this.combat.onDeath = () => {
       void this.dieInCastle();
+    };
+    this.combat.onBossDeath = () => {
+      void this.defeatBoss();
     };
 
     this.resumeHint = requiredElement(document, 'click-to-play');
@@ -199,9 +202,6 @@ export class App {
     this.updateStairs();
     if (this.location === 'castle' && this.state === 'playing') {
       this.combat.update(deltaMs);
-      if (this.combatTest) {
-        this.updateCombatTest(deltaMs);
-      }
     }
     if (this.location === 'castle' && this.castle && this.state === 'playing') {
       this.minimapTimer += deltaMs;
@@ -247,36 +247,6 @@ export class App {
     }
   }
 
-  /** Keep a fresh target in front of the player while using /combat. */
-  private updateCombatTest(deltaMs: number): void {
-    if (!this.castle) {
-      return;
-    }
-    if (this.castle.guards.some((guard) => guard.isAlive)) {
-      this.testRespawnTimer = 0;
-      return;
-    }
-    if (this.testRespawnTimer <= 0) {
-      this.testRespawnTimer = 2.5;
-    }
-    this.testRespawnTimer -= deltaMs / 1000;
-    if (this.testRespawnTimer > 0) {
-      return;
-    }
-    this.testRespawnTimer = 0;
-    const entrance = this.castle.dungeon.entrance;
-    void this.castle
-      .spawnGuardAt(0, entrance.x, Math.max(1, entrance.z - 1))
-      .then((guard) => {
-        if (guard) {
-          guard.yaw = Math.PI;
-          guard.root.rotation.y = 0;
-          guard.hold(999);
-          this.combat.attachGuard(guard);
-        }
-      });
-  }
-
   private updateLighting(): void {
     if (this.location === 'castle' && this.castle) {
       this.castle.updateLighting(this.player.camera.position);
@@ -284,7 +254,7 @@ export class App {
   }
 
   private updatePrompt(): void {
-    if (this.state !== 'playing') {
+    if (this.state !== 'playing' || this.outro) {
       this.hud.setPrompt(null);
       return;
     }
@@ -302,7 +272,7 @@ export class App {
   }
 
   private async handleInteract(): Promise<void> {
-    if (this.state !== 'playing') {
+    if (this.state !== 'playing' || this.outro) {
       return;
     }
     const pos = this.player.position;
@@ -378,19 +348,14 @@ export class App {
       const castle = new DungeonScene(this.host.scene, this.library, this.runSeed);
       await castle.build();
       if (this.combatTest) {
+        // Boss arena: the king and two bodyguards hold the entrance room.
         castle.clearGuards();
         const entrance = castle.dungeon.entrance;
-        const testGuard = await castle.spawnGuardAt(
-          0,
-          entrance.x,
-          Math.max(1, entrance.z - 1),
-        );
-        if (testGuard) {
-          testGuard.yaw = Math.PI;
-          testGuard.root.rotation.y = 0;
-          testGuard.hold(999);
-        }
-        this.testRespawnTimer = 0;
+        await castle.spawnBossEncounter(0, entrance.x, Math.max(1, entrance.z - 2), {
+          hold: true,
+          faceX: entrance.x * 4,
+          faceZ: (entrance.z + 1) * 4,
+        });
       }
       this.castle = castle;
       this.location = 'castle';
@@ -429,7 +394,7 @@ export class App {
     this.combat.setInputEnabled(this.state === 'playing');
     this.hud.showToast(
       this.combatTest
-        ? 'Combat test — hold LMB to draw, release to fire'
+        ? 'Defeat the King — hold LMB to draw, release to fire'
         : 'Find the king or raid the vault — then return to the gate.',
     );
   }
@@ -457,6 +422,9 @@ export class App {
   }
 
   private async dieInCastle(): Promise<void> {
+    if (this.outro) {
+      return;
+    }
     if (this.state !== 'playing' && this.state !== 'paused') {
       return;
     }
@@ -477,7 +445,55 @@ export class App {
     this.hud.showToast(lost > 0 ? `You died — lost ${lost} gold` : 'You died');
   }
 
+  /**
+   * The king is dead: award crowns, let him fall, then bank the run and return
+   * to Sherwood. Shared by the /combat arena and the real castle.
+   */
+  private async defeatBoss(): Promise<void> {
+    if (this.outro) {
+      return;
+    }
+    if (this.state !== 'playing' && this.state !== 'paused') {
+      return;
+    }
+    this.outro = true;
+    this.hud.setPrompt(null);
+    // Keep the run live for a beat so the death animation plays out.
+    await wait(1800);
+    if (!this.castle) {
+      this.outro = false;
+      return;
+    }
+    this.state = 'boot';
+    this.hud.setPrompt(null);
+    this.combat.leaveCastle();
+    const banked = this.runGold;
+    await this.fadeThrough(async () => {
+      this.castle?.dispose();
+      this.castle = null;
+      await this.loadHub();
+    });
+    this.save.update((save) => {
+      save.wallet.crowns += BOSS.crownReward;
+      save.stats.crownsEarned += BOSS.crownReward;
+      if (banked > 0) {
+        save.wallet.gold += banked;
+        save.stats.goldEarned += banked;
+      }
+    });
+    this.runGold = 0;
+    this.runKeys = 0;
+    this.refreshWallet();
+    this.state = 'playing';
+    this.combat.setInputEnabled(false);
+    this.outro = false;
+    this.hud.showToast(
+      `King slain · +${BOSS.crownReward} crowns${banked > 0 ? ` · banked ${banked} gold` : ''}`,
+    );
+  }
+
   private async loadHub(): Promise<void> {
+    this.outro = false;
     this.combat.leaveCastle();
     this.castle?.dispose();
     this.castle = null;

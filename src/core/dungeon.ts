@@ -499,6 +499,36 @@ const NEIGHBOURS: ReadonlyArray<Point> = [
  * Playable bounds for a grid. Walkable cells are 1..width-2, and their outer
  * edges sit half a tile beyond the cell centres.
  */
+/**
+ * Preferred bodyguard offsets around a boss cell, tried in order. Kept here so
+ * boss encounter placement stays engine-independent and testable.
+ */
+export const BODYGUARD_OFFSETS: ReadonlyArray<{ x: number; z: number }> = [
+  { x: -1, z: 1 },
+  { x: 1, z: 1 },
+  { x: -1, z: -1 },
+  { x: 1, z: -1 },
+  { x: 0, z: 2 },
+  { x: 0, z: -2 },
+];
+
+/** Floor cells (excluding the centre) that can hold bodyguards around `centre`. */
+export function bodyguardCells(
+  floor: FloorLayout,
+  centre: { x: number; z: number },
+): Array<{ x: number; z: number }> {
+  return BODYGUARD_OFFSETS.map((offset) => ({
+    x: centre.x + offset.x,
+    z: centre.z + offset.z,
+  })).filter(
+    (cell) => isFloor(floor, cell.x, cell.z) && (cell.x !== centre.x || cell.z !== centre.z),
+  );
+}
+
+/**
+ * Playable bounds for a grid. Walkable cells are 1..width-2, and their outer
+ * edges sit half a tile beyond the cell centres.
+ */
 export function worldBoundsFor(width: number, height: number, tile: number): Bounds2 {
   return {
     minX: tile / 2,

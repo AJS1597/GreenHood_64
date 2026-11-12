@@ -1,6 +1,7 @@
 import { Vector3 } from '@babylonjs/core';
 import type { Scene } from '@babylonjs/core';
 import {
+  BOSS,
   COMBAT,
   bowStats,
   drawTimeToCharge,
@@ -24,6 +25,8 @@ import type { Hud } from '../ui/Hud';
  */
 export class CombatSystem {
   onDeath: (() => void) | null = null;
+  /** Fired when the king boss dies, after the kill is recorded. */
+  onBossDeath: (() => void) | null = null;
 
   private readonly arrows: ArrowSystem;
   private readonly alerted = new Set<Guard>();
@@ -93,16 +96,19 @@ export class CombatSystem {
     this.player.camera.fov = this.baseFov;
 
     for (const guard of dungeon.guards) {
-      this.attachGuard(guard);
+      this.attachGuard(guard, guard.isBoss);
     }
   }
 
-  attachGuard(guard: Guard): void {
+  attachGuard(guard: Guard, isBoss = false): void {
     guard.onAttack = (damage) => this.damagePlayer(damage);
     guard.onDeath = () => {
       this.save.update((data) => {
         data.stats.guardsKilled += 1;
       });
+      if (isBoss) {
+        this.onBossDeath?.();
+      }
     };
   }
 
@@ -121,6 +127,7 @@ export class CombatSystem {
     this.bow.setCharging(false);
     this.player.camera.fov = this.baseFov;
     this.hud.setHealth(null);
+    this.hud.setBoss(null, 0, 0);
     this.hud.setAlert(false);
     this.hud.setCharge(0);
   }
@@ -241,6 +248,12 @@ export class CombatSystem {
     }
 
     this.hud.setHealth(this.health, this.maxHealth);
+    const boss = this.dungeon.boss;
+    this.hud.setBoss(
+      boss && boss.isAlive && boss.floor === floor ? BOSS.name : null,
+      boss?.health ?? 0,
+      boss?.maxHealth ?? 0,
+    );
     this.hud.setAlert(this.dungeon.guards.some((guard) => guard.isAlerted));
   }
 
@@ -257,7 +270,12 @@ export class CombatSystem {
     }
     const pos = this.player.position;
     for (const guard of this.dungeon.guards) {
-      if (!guard.isAlive || guard.floor !== this.dungeon.currentFloor || guard.isAlerted) {
+      if (
+        !guard.isAlive ||
+        guard.isBoss ||
+        guard.floor !== this.dungeon.currentFloor ||
+        guard.isAlerted
+      ) {
         continue;
       }
       if (Math.hypot(guard.x - pos.x, guard.z - pos.z) <= 3.0) {
@@ -269,7 +287,9 @@ export class CombatSystem {
 
   debugLabel(): string {
     const alive = this.dungeon?.guards.filter((guard) => guard.isAlive).length ?? 0;
-    return `${Math.ceil(this.health)}/${this.maxHealth} hp · ${alive} guards`;
+    const boss = this.dungeon?.boss;
+    const king = boss && boss.isAlive ? ` · king ${Math.ceil(boss.health)}/${boss.maxHealth}` : '';
+    return `${Math.ceil(this.health)}/${this.maxHealth} hp · ${alive} guards${king}`;
   }
 
   tryTakedown(): boolean {

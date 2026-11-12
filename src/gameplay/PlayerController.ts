@@ -20,6 +20,12 @@ export interface PlayerTuning {
   acceleration: number;
 }
 
+/**
+ * Arrow-key look rate, expressed as equivalent mouse pixels per second so the
+ * keyboard and mouse share the same sensitivity curve.
+ */
+const ARROW_LOOK_PIXELS_PER_SECOND = 900;
+
 export const DEFAULT_PLAYER_TUNING: PlayerTuning = {
   eyeHeight: 1.6,
   crouchEyeHeight: 1.1,
@@ -148,6 +154,7 @@ export class PlayerController {
       this.syncCamera(dt);
       return;
     }
+    this.updateLook(dt);
     this.updateMovement(dt);
     this.updateGroundHeight(dt);
     this.syncCamera(dt);
@@ -163,6 +170,10 @@ export class PlayerController {
 
   private bind(): void {
     const onKeyDown = (event: KeyboardEvent): void => {
+      // While pointer-locked the arrows steer the camera instead of scrolling.
+      if (this.locked && event.code.startsWith('Arrow')) {
+        event.preventDefault();
+      }
       if (event.repeat) {
         return;
       }
@@ -174,16 +185,6 @@ export class PlayerController {
     const onKeyUp = (event: KeyboardEvent): void => {
       this.keys.delete(event.code);
     };
-    const applyLook = (movementX: number, movementY: number): void => {
-      if (!this.locked) {
-        return;
-      }
-      const sensitivity = 0.0022 * this.settings.sensitivity;
-      this.yaw += movementX * sensitivity;
-      this.pitch += movementY * sensitivity * (this.settings.invertY ? -1 : 1);
-      const limit = Math.PI / 2 - 0.05;
-      this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
-    };
     const onPointerMove = (event: PointerEvent): void => {
       if (event.pointerType && event.pointerType !== 'mouse') {
         return;
@@ -192,7 +193,7 @@ export class PlayerController {
         return;
       }
       this.lastPointerMoveAt = performance.now();
-      applyLook(event.movementX, event.movementY);
+      this.applyLook(event.movementX, event.movementY);
     };
     const onMouseMove = (event: MouseEvent): void => {
       // Pointer events keep firing while a mouse button is held; compatibility
@@ -201,7 +202,7 @@ export class PlayerController {
       if (performance.now() - this.lastPointerMoveAt < 50) {
         return;
       }
-      applyLook(event.movementX, event.movementY);
+      this.applyLook(event.movementX, event.movementY);
     };
     const onLockChange = (): void => {
       this.locked = document.pointerLockElement === this.canvas;
@@ -231,6 +232,29 @@ export class PlayerController {
       () => document.removeEventListener('pointerlockchange', onLockChange),
       () => this.canvas.removeEventListener('contextmenu', onContextMenu),
     );
+  }
+
+  /** Apply a look delta (in mouse-pixel units) to yaw/pitch. Mouse and keys share this. */
+  private applyLook(movementX: number, movementY: number): void {
+    if (!this.locked) {
+      return;
+    }
+    const sensitivity = 0.0022 * this.settings.sensitivity;
+    this.yaw += movementX * sensitivity;
+    this.pitch += movementY * sensitivity * (this.settings.invertY ? -1 : 1);
+    const limit = Math.PI / 2 - 0.05;
+    this.pitch = Math.max(-limit, Math.min(limit, this.pitch));
+  }
+
+  /** Arrow-key look, converted to the same units as mouse movement. */
+  private updateLook(dt: number): void {
+    const turn = (this.keys.has('ArrowRight') ? 1 : 0) - (this.keys.has('ArrowLeft') ? 1 : 0);
+    const tilt = (this.keys.has('ArrowDown') ? 1 : 0) - (this.keys.has('ArrowUp') ? 1 : 0);
+    if (turn === 0 && tilt === 0) {
+      return;
+    }
+    const delta = ARROW_LOOK_PIXELS_PER_SECOND * dt;
+    this.applyLook(turn * delta, tilt * delta);
   }
 
   private updateCrouch(): void {

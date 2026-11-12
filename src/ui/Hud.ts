@@ -13,6 +13,11 @@ export class Hud {
   private readonly healthFill: HTMLElement;
   private readonly healthValue: HTMLElement;
   private readonly healthMax: HTMLElement;
+  private readonly boss: HTMLElement;
+  private readonly bossName: HTMLElement;
+  private readonly bossFill: HTMLElement;
+  private readonly bossValue: HTMLElement;
+  private readonly bossMax: HTMLElement;
   private readonly alert: HTMLElement;
   private readonly chargeRing: HTMLElement;
   private readonly hitMarker: HTMLElement;
@@ -33,6 +38,11 @@ export class Hud {
     this.healthFill = require(document, 'hud-health-fill');
     this.healthValue = require(document, 'hud-health-value');
     this.healthMax = require(document, 'hud-health-max');
+    this.boss = require(document, 'hud-boss');
+    this.bossName = require(document, 'hud-boss-name');
+    this.bossFill = require(document, 'hud-boss-fill');
+    this.bossValue = require(document, 'hud-boss-value');
+    this.bossMax = require(document, 'hud-boss-max');
     this.alert = require(document, 'hud-alert');
     this.chargeRing = require(document, 'charge-ring');
     this.hitMarker = require(document, 'hit-marker');
@@ -90,6 +100,20 @@ export class Hud {
     this.healthFill.style.width = `${percent}%`;
     this.healthValue.textContent = String(Math.ceil(clamped));
     this.healthMax.textContent = String(Math.ceil(max));
+  }
+
+  setBoss(name: string | null, current: number, max = 1): void {
+    if (!name) {
+      this.boss.hidden = true;
+      return;
+    }
+    const clamped = Math.max(0, Math.min(current, max));
+    const percent = max > 0 ? (clamped / max) * 100 : 0;
+    this.boss.hidden = false;
+    this.bossName.textContent = name;
+    this.bossFill.style.width = `${percent}%`;
+    this.bossValue.textContent = String(Math.ceil(clamped));
+    this.bossMax.textContent = String(Math.ceil(max));
   }
 
   setAlert(active: boolean): void {
