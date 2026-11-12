@@ -8,7 +8,7 @@ You raid a randomly generated two-floor castle, steal gold from chests and vault
 
 Non-combat base pass complete. Playable loop taking shape:
 
-- **Sherwood camp** (fixed hub): a forest clearing with a path, a stone castle keep, gatehouse and towers, plus four merchant stalls (Bows, Abilities, Training, Crowns). A subdued overcast sky with soft clouds and a diffuse sun.
+- **Sherwood camp** (fixed hub): a forest clearing ringed by a dense treeline, with a fence- and lantern-lined path, a stone castle keep, gatehouse and towers, and four merchant stalls (Bows, Abilities, Training, Crowns) with benches, barrels and clutter. A bright blue sky with drifting cumulus clouds and a diffuse sun.
 - **First-person controller**: pointer lock, WASD, sprint, crouch, head bob, plus a visible equipped bow. Movement resolves against a reusable 2D collision system with per-storey vertical spans.
 - **Progression**: gold (bows, training, gold abilities) and crowns (elite abilities), saved to `localStorage`.
 - **Castle run**: smaller seeded two-floor dungeon with rooms, corridors, a real walkable staircase, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.

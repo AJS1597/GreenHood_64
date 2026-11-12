@@ -200,6 +200,9 @@ export class App {
   private update(deltaMs: number): void {
     this.player.update(deltaMs);
     this.updateStairs();
+    if (this.location === 'hub') {
+      this.hub?.update(deltaMs / 1000);
+    }
     if (this.location === 'castle' && this.state === 'playing') {
       this.combat.update(deltaMs);
     }
