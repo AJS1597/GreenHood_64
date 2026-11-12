@@ -8,12 +8,12 @@ You raid a randomly generated two-floor castle, steal gold from chests and vault
 
 Playable loop taking shape:
 
-- **Sherwood camp** (fixed hub): a forest clearing with a path, castle gate and four merchant stalls (Bows, Abilities, Training, Crowns). A subdued overcast sky with soft clouds and a diffuse sun.
-- **First-person controller**: pointer lock, WASD, sprint, crouch, head bob. Movement resolves against a reusable 2D collision system.
+- **Sherwood camp** (fixed hub): a forest clearing with a path, a stone castle keep and gate, and four merchant stalls (Bows, Abilities, Training, Crowns). A subdued overcast sky with soft clouds and a diffuse sun.
+- **First-person controller**: pointer lock, WASD, sprint, crouch, head bob, plus a visible equipped bow. Movement resolves against a reusable 2D collision system with per-storey vertical spans.
 - **Progression**: gold (bows, training, gold abilities) and crowns (elite abilities), saved to `localStorage`.
-- **Castle run**: seeded two-floor dungeon with rooms, corridors, a stairwell, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.
+- **Castle run**: seeded two-floor dungeon with rooms, corridors, a walkable staircase, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.
 
-Next up: king (+ bodyguards), guards with stealth/backstab, bow combat and looting.
+Next up: king (+ bodyguards), guards with stealth/backstab, and bow combat.
 
 ## Requirements
 

@@ -13,6 +13,7 @@ export interface PlayerTuning {
   eyeHeight: number;
   crouchEyeHeight: number;
   radius: number;
+  bodyHeight: number;
   walkSpeed: number;
   sprintSpeed: number;
   crouchSpeed: number;
@@ -23,6 +24,7 @@ export const DEFAULT_PLAYER_TUNING: PlayerTuning = {
   eyeHeight: 1.6,
   crouchEyeHeight: 1.1,
   radius: 0.35,
+  bodyHeight: 1.75,
   walkSpeed: 3.4,
   sprintSpeed: 5.6,
   crouchSpeed: 1.6,
@@ -40,6 +42,11 @@ export class PlayerController {
   colliders: readonly Aabb2[] = [];
   bounds: Bounds2 | null = null;
   baseY = 0;
+  /**
+   * Optional height sampler for ramps and multi-storey spaces. When set, the
+   * controller follows the returned walking surface instead of the flat baseY.
+   */
+  groundHeight: ((x: number, z: number) => number) | null = null;
 
   onInteract: (() => void) | null = null;
   onLockChange: ((locked: boolean) => void) | null = null;
@@ -58,6 +65,7 @@ export class PlayerController {
   private velocityX = 0;
   private velocityZ = 0;
   private currentEye: number;
+  private feetY = 0;
   private crouching = false;
   private sprinting = false;
   private locked = false;
@@ -103,6 +111,11 @@ export class PlayerController {
     return Math.hypot(this.velocityX, this.velocityZ);
   }
 
+  /** Height of the walking surface under the player's feet. */
+  get feet(): number {
+    return this.feetY;
+  }
+
   spawn(x: number, z: number, yaw: number): void {
     this.x = x;
     this.z = z;
@@ -110,6 +123,7 @@ export class PlayerController {
     this.pitch = 0;
     this.velocityX = 0;
     this.velocityZ = 0;
+    this.feetY = this.groundHeight ? this.groundHeight(x, z) : this.baseY;
     this.syncCamera();
   }
 
@@ -128,11 +142,13 @@ export class PlayerController {
     const dt = Math.min(deltaMs, 100) / 1000;
     if (!this.locked) {
       this.decayVelocity(dt);
+      this.updateGroundHeight(dt);
       this.syncCamera(dt);
       return;
     }
     this.updateCrouch();
     this.updateMovement(dt);
+    this.updateGroundHeight(dt);
     this.syncCamera(dt);
   }
 
@@ -236,9 +252,25 @@ export class PlayerController {
       this.tuning.radius,
       this.colliders,
       this.bounds ?? undefined,
+      3,
+      {
+        minY: this.feetY + 0.1,
+        maxY: this.feetY + this.tuning.bodyHeight,
+      },
     );
     this.x = resolved.x;
     this.z = resolved.z;
+  }
+
+  private updateGroundHeight(dt: number): void {
+    const target = this.groundHeight ? this.groundHeight(this.x, this.z) : this.baseY;
+    // Fast smoothing keeps stair ramps comfortable without snapping the camera
+    // when a floor transition happens.
+    const blend = Math.min(1, dt * 16);
+    this.feetY += (target - this.feetY) * blend;
+    if (Math.abs(target - this.feetY) < 0.002) {
+      this.feetY = target;
+    }
   }
 
   private decayVelocity(dt: number): void {
@@ -251,7 +283,7 @@ export class PlayerController {
     const targetEye = this.crouching ? this.tuning.crouchEyeHeight : this.tuning.eyeHeight;
     this.currentEye += (targetEye - this.currentEye) * Math.min(1, dt * 12);
 
-    this.camera.position.set(this.x, this.baseY + this.currentEye, this.z);
+    this.camera.position.set(this.x, this.feetY + this.currentEye, this.z);
     this.camera.rotation.set(this.pitch, this.yaw, 0);
   }
 }

@@ -5,6 +5,7 @@ import {
   DynamicTexture,
   HemisphericLight,
   Light,
+  Mesh,
   MeshBuilder,
   Scene,
   ShadowGenerator,
@@ -91,6 +92,7 @@ export class HubScene {
     this.buildGround();
     await this.buildPath();
     await this.buildGate();
+    await this.buildCastle();
     await this.buildStalls();
     await this.scatterForest();
 
@@ -157,6 +159,85 @@ export class HubScene {
       z: -16.5,
       radius: 3.6,
     });
+  }
+
+  /**
+   * A stone keep behind the gate so Sherwood reads as a camp outside a castle,
+   * not a gate standing alone in the woods. Purely a backdrop; the gate remains
+   * the only way in.
+   */
+  private async buildCastle(): Promise<void> {
+    const stone = new StandardMaterial('hub-castle-stone', this.scene);
+    stone.diffuseColor = new Color3(0.5, 0.51, 0.57);
+    stone.emissiveColor = new Color3(0.045, 0.047, 0.06);
+    stone.specularColor = new Color3(0.02, 0.02, 0.03);
+
+    const shadowStone = new StandardMaterial('hub-castle-shadow-stone', this.scene);
+    shadowStone.diffuseColor = new Color3(0.42, 0.43, 0.49);
+    shadowStone.emissiveColor = new Color3(0.03, 0.032, 0.04);
+    shadowStone.specularColor = new Color3(0, 0, 0);
+
+    const dark = new StandardMaterial('hub-castle-dark', this.scene);
+    dark.diffuseColor = new Color3(0.045, 0.045, 0.06);
+    dark.emissiveColor = new Color3(0.015, 0.012, 0.008);
+    dark.specularColor = new Color3(0, 0, 0);
+
+    // Gatehouse and passage.
+    this.addCastleBox('castle-gatehouse', 0, 6, -23.2, 12.5, 12, 4.4, stone);
+    this.addCastleBox('castle-portal', 0, 2.9, -20.95, 5.4, 5.8, 0.35, dark);
+    this.addCastleBox('castle-gatehouse-top', 0, 12.3, -23.6, 13.5, 0.8, 4.6, shadowStone);
+
+    // Main keep and flanking towers.
+    this.addCastleBox('castle-keep', 0, 7, -30, 30, 14, 8, stone);
+    this.addCastleBox('castle-keep-band', 0, 10.8, -25.9, 30.5, 0.7, 0.6, shadowStone);
+    this.addCastleBox('castle-tower-left', -14.5, 8.5, -26.5, 7, 17, 7, stone);
+    this.addCastleBox('castle-tower-right', 14.5, 8.5, -26.5, 7, 17, 7, stone);
+
+    // Crenellations along every roofline.
+    for (let x = -13.5; x <= 13.5; x += 2.1) {
+      this.addCastleBox(`castle-merlon-keep-${x}`, x, 14.5, -26.1, 1.2, 1.4, 1.2, shadowStone);
+    }
+    for (let x = -5.5; x <= 5.5; x += 1.9) {
+      this.addCastleBox(`castle-merlon-gate-${x}`, x, 13.2, -20.8, 1.05, 1.3, 1.0, shadowStone);
+    }
+    for (const side of [-1, 1]) {
+      const towerX = side * 14.5;
+      for (let x = towerX - 2.6; x <= towerX + 2.6; x += 1.7) {
+        this.addCastleBox(`castle-merlon-tower-${side}-${x}`, x, 17.5, -23.1, 1.1, 1.2, 1.1, shadowStone);
+      }
+      await this.place('town', 'roof-high-point', towerX, -26.5, {
+        scale: 6.4,
+        y: 17.2,
+      });
+    }
+
+    // A few slit windows break up the flat stone.
+    for (const x of [-4.2, 4.2]) {
+      this.addCastleBox(`castle-window-${x}`, x, 7.6, -20.9, 0.55, 2.2, 0.3, dark);
+    }
+    for (const side of [-1, 1]) {
+      this.addCastleBox(`castle-tower-window-${side}`, side * 14.5, 10.4, -22.9, 0.8, 2.6, 0.3, dark);
+      this.addCastleBox(`castle-tower-window-high-${side}`, side * 14.5, 14.0, -22.9, 0.8, 2.0, 0.3, dark);
+    }
+  }
+
+  private addCastleBox(
+    name: string,
+    x: number,
+    y: number,
+    z: number,
+    width: number,
+    height: number,
+    depth: number,
+    material: StandardMaterial,
+  ): Mesh {
+    const box = MeshBuilder.CreateBox(name, { width, height, depth }, this.scene);
+    box.parent = this.root;
+    box.position.set(x, y, z);
+    box.material = material;
+    box.receiveShadows = true;
+    this.shadow.addShadowCaster(box);
+    return box;
   }
 
   private async buildStalls(): Promise<void> {

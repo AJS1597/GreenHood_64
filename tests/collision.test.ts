@@ -43,6 +43,25 @@ describe('collision', () => {
     }
   });
 
+  it('ignores colliders from another storey', () => {
+    const upperWall = {
+      ...aabbFromCenter(0, 0, 1, 1),
+      minY: 4.15,
+      maxY: 8.3,
+    };
+    const ground = resolveCircle(0.5, 0, 0.5, [upperWall], undefined, 3, {
+      minY: 0.1,
+      maxY: 1.85,
+    });
+    expect(ground).toEqual({ x: 0.5, z: 0 });
+
+    const upstairs = resolveCircle(0.5, 0, 0.5, [upperWall], undefined, 3, {
+      minY: 4.25,
+      maxY: 6,
+    });
+    expect(upstairs.x).toBeCloseTo(1.5, 5);
+  });
+
   it('measures distance to a box', () => {
     expect(distanceToAabb(box, 4, 0)).toBeCloseTo(3, 5);
     expect(distanceToAabb(box, 0, 0)).toBe(0);

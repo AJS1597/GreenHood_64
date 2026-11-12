@@ -8,6 +8,7 @@ import { LoadingScreen } from '../ui/LoadingScreen';
 import { Hud } from '../ui/Hud';
 import { ShopPanel } from '../ui/ShopPanel';
 import { PlayerController } from '../gameplay/PlayerController';
+import { BowViewModel } from '../gameplay/BowViewModel';
 import { DEBUG } from '../core/config';
 import { formatSeed, randomSeed } from '../core/rng';
 import type { ShopTab } from '../core/shop';
@@ -39,6 +40,7 @@ export class App {
   private readonly hud: Hud;
   private readonly shop: ShopPanel;
   private readonly player: PlayerController;
+  private readonly bow: BowViewModel;
   private readonly resumeHint: HTMLElement;
   private readonly fade: HTMLElement;
   private readonly debugState: HTMLElement | null;
@@ -67,6 +69,12 @@ export class App {
     this.hud = new Hud(document);
     this.shop = new ShopPanel(document, this.save);
     this.player = new PlayerController(this.host.scene, canvas, this.save.current.settings);
+    this.bow = new BowViewModel(
+      this.host.scene,
+      this.library,
+      this.player.camera,
+      this.save.current.bowTier,
+    );
 
     this.resumeHint = requiredElement(document, 'click-to-play');
     this.fade = requiredElement(document, 'fade');
@@ -89,6 +97,7 @@ export class App {
     this.loading.setLabel('Building Sherwood camp…');
     this.loading.setProgress(0.35);
     await this.loadHub();
+    await this.bow.build();
     this.loading.setProgress(0.9);
 
     this.wireUi();
@@ -132,6 +141,7 @@ export class App {
       const save = this.save.current;
       this.refreshWallet();
       this.player.camera.fov = save.settings.fov;
+      void this.bow.setTier(save.bowTier);
     };
 
     // Clicking anywhere while paused recaptures the mouse; Escape also resumes
@@ -174,12 +184,8 @@ export class App {
     if (this.location !== 'castle' || !this.castle || this.state !== 'playing') {
       return;
     }
-    const pos = this.player.position;
-    const destination = this.castle.tryUseStairs(pos.x, pos.z);
-    if (destination) {
-      this.player.spawn(destination.x, destination.z, this.player.camera.rotation.y);
+    if (this.castle.syncPlayer(this.player.feet)) {
       this.applyCastleFloor();
-      this.hud.showToast(`Castle — floor ${this.castle.currentFloor + 1}`);
     }
   }
 
@@ -229,6 +235,7 @@ export class App {
           await this.leaveCastle();
           return;
         case 'chest':
+          this.castle.take(interactable);
           this.runGold += 35;
           this.refreshWallet();
           this.hud.showToast('+35 gold');
@@ -237,6 +244,7 @@ export class App {
           this.hud.showToast(this.runKeys > 0 ? 'Locked chest — a key is needed' : 'It is locked tight');
           return;
         case 'key':
+          this.castle.take(interactable);
           this.runKeys += 1;
           this.hud.showToast('Key taken');
           return;
@@ -260,6 +268,7 @@ export class App {
       this.castle = castle;
       this.location = 'castle';
       this.player.baseY = castle.baseY;
+      this.player.groundHeight = (x, z) => castle.groundHeightAt(x, z);
       this.player.colliders = castle.colliders;
       this.player.bounds = castle.bounds;
       this.player.spawn(castle.dungeon.entrance.x * 4, (castle.dungeon.entrance.z + 1) * 4, Math.PI);
@@ -302,6 +311,7 @@ export class App {
     this.hub = hub;
     this.location = 'hub';
     this.player.baseY = 0;
+    this.player.groundHeight = null;
     this.player.colliders = hub.colliders;
     this.player.bounds = hub.bounds;
     this.player.spawn(hub.spawn.x, hub.spawn.z, hub.spawn.yaw);
