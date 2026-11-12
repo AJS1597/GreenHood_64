@@ -38,7 +38,6 @@ export class CombatSystem {
   private charging = false;
   private chargeTime = 0;
   private charge = 0;
-  private aiming = false;
   private cooldown = 0;
   private invulnerable = 0;
   private baseFov = 1.15;
@@ -79,7 +78,6 @@ export class CombatSystem {
     this.maxHealth = maxHealth;
     this.health = maxHealth;
     this.charging = false;
-    this.aiming = false;
     this.charge = 0;
     this.chargeTime = 0;
     this.cooldown = 0;
@@ -87,7 +85,6 @@ export class CombatSystem {
     this.takedownTarget = null;
     this.alerted.clear();
     this.arrows.clear();
-    this.bow.setAiming(false);
     this.bow.setDraw(0);
     this.bow.setCharging(false);
     this.hud.setHealth(this.health, this.maxHealth);
@@ -117,12 +114,10 @@ export class CombatSystem {
     this.inputEnabled = false;
     this.dungeon = null;
     this.charging = false;
-    this.aiming = false;
     this.charge = 0;
     this.takedownTarget = null;
     this.alerted.clear();
     this.arrows.clear();
-    this.bow.setAiming(false);
     this.bow.setDraw(0);
     this.bow.setCharging(false);
     this.player.camera.fov = this.baseFov;
@@ -134,10 +129,8 @@ export class CombatSystem {
 
   cancel(): void {
     this.charging = false;
-    this.aiming = false;
     this.charge = 0;
     this.chargeTime = 0;
-    this.bow.setAiming(false);
     this.bow.setDraw(0);
     this.bow.setCharging(false);
     this.player.camera.fov = this.baseFov;
@@ -163,14 +156,11 @@ export class CombatSystem {
       this.hud.setCharge(0);
     }
 
-    this.bow.setAiming(this.aiming);
     // Sprint widens the view to sell a dash; crouch tightens it so low
     // movement feels deliberate without reducing the actual crouch speed.
     const sprintFov = this.player.isSprinting ? 0.15 : 0;
     const crouchFov = this.player.isCrouching ? -0.09 : 0;
-    const targetFov = this.aiming
-      ? this.baseFov * 0.78
-      : this.baseFov + sprintFov + crouchFov;
+    const targetFov = this.baseFov + sprintFov + crouchFov;
     this.player.camera.fov += (targetFov - this.player.camera.fov) * Math.min(1, dt * 12);
 
     const floor = this.dungeon.currentFloor;
@@ -316,14 +306,9 @@ export class CombatSystem {
       if (!this.active || !this.inputEnabled) {
         return;
       }
-      if (event.button === 2) {
-        this.aiming = true;
-        return;
-      }
       if (event.button !== 0 || this.cooldown > 0 || this.charging) {
         return;
       }
-      // LMB charges and fires on its own; RMB is only the optional zoom.
       // Do not preventDefault here: it can suppress the mousemove stream that
       // drives camera look while the button is held.
       this.charging = true;
@@ -336,8 +321,7 @@ export class CombatSystem {
         return;
       }
       if (event.button === 2) {
-        this.aiming = false;
-        return;
+            return;
       }
       if (event.button === 0 && this.charging) {
         this.fire();

@@ -14,7 +14,7 @@ Non-combat base pass complete. Playable loop taking shape:
 - **Castle run**: smaller seeded two-floor dungeon with rooms, corridors, a real walkable staircase, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.
 - **Navigation**: fog-of-war minimap that fills in explored rooms and hallways. It never shows guards. Stair landings are marked with ↑/↓ direction arrows.
 - **Looting**: chests and keys are collected and removed from the world; chests have collision, keys are counted in the HUD, and locked chests consume a key. Stone columns reach the ceiling and block movement.
-- **Combat (first pass)**: chargeable physical arrows, RMB aim/zoom, guards with vision cones + hearing + alert propagation, patrol/investigate/chase/search states, spear attacks, player health/damage/death, and crouched rear takedowns.
+- **Combat (first pass)**: chargeable physical arrows, guards with vision cones + hearing + alert propagation, patrol/investigate/chase/search states, spear attacks, player health/damage/death, and crouched rear takedowns.
 - **King boss**: a larger, red-tinted king with two bodyguards in the castle's upper king's chamber (and in the `/combat` test arena). He telegraphs and detonates a radial slam, is immune to takedowns, and ends the run with crowns when killed.
 - **Combat consequences**: guards hit for 25 damage (four hits at base health); dying loses run gold and keys and returns you to Sherwood.
 
@@ -57,7 +57,6 @@ Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for th
 | Sprint | `Shift` |
 | Crouch | `C` |
 | Charge / fire bow | Hold / release `LMB` |
-| Aim / zoom | `RMB` |
 | Takedown guard | `E` while crouched behind an unaware guard |
 | Interact / shop / enter castle | `E` |
 | Pause / recapture mouse | `Esc` (or click) |
