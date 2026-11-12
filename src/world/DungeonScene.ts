@@ -535,20 +535,27 @@ export class DungeonScene {
   }
 
   private async buildEntrance(): Promise<void> {
+    const entrance = this.dungeon.entrance;
+    const entranceRoom = this.dungeon.floors[0].rooms.find((room) => room.kind === 'entrance');
+    const radius = entranceRoom?.radius ?? 2;
+    // The room's north wall face is one half-cell beyond its last floor cell.
+    const backWallZ = (entrance.z - radius - 0.5) * TILE;
+
     const mesh = await this.cloneMesh('dungeon', 'gate-door', this.floorRoots[0]!);
     if (mesh) {
-      mesh.position = new Vector3(
-        this.dungeon.entrance.x * TILE,
-        0,
-        (this.dungeon.entrance.z - 2) * TILE,
-      );
+      mesh.rotationQuaternion = null;
+      mesh.rotation.set(0, 0, 0);
+      // Keep the door flush with the wall face instead of floating a couple of
+      // cells into the room, and thin it so its front lines up with collision.
+      mesh.position.set(entrance.x * TILE, 0, backWallZ + 0.2);
+      mesh.scaling.set(1, WALL_H / 4.4, 0.4 / 1.4);
     }
     this.interactables.push({
       id: 'exit',
       label: 'Leave the castle',
-      x: this.dungeon.entrance.x * TILE,
-      z: this.dungeon.entrance.z * TILE,
-      radius: 3.2,
+      x: entrance.x * TILE,
+      z: backWallZ + 2.5,
+      radius: 2.8,
       floor: 0,
     });
   }
