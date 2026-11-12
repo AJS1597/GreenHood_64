@@ -13,7 +13,7 @@ import {
   TransformNode,
   Vector3,
 } from '@babylonjs/core';
-import { createRng } from '../core/rng';
+import { createRng, type Rng } from '../core/rng';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
 import type { AssetKit, AssetLibrary } from './AssetLibrary';
 import { createForestSky, type Sky } from './Skybox';
@@ -66,7 +66,7 @@ export class HubScene {
 
     const skyLight = new HemisphericLight('hub-sky', new Vector3(0.1, 1, -0.1), scene);
     skyLight.intensity = 0.66;
-    skyLight.diffuse = new Color3(0.76, 0.82, 0.86);
+    skyLight.diffuse = new Color3(0.72, 0.82, 0.96);
     skyLight.groundColor = new Color3(0.16, 0.2, 0.15);
 
     const sun = new DirectionalLight('hub-sun', SUN_TRAVEL, scene);
@@ -84,8 +84,17 @@ export class HubScene {
     this.sky.root.parent = this.root;
 
     scene.fogMode = Scene.FOGMODE_EXP2;
-    scene.fogColor = new Color3(0.8, 0.85, 0.88);
+    // Match the sky's horizon so distant ground and trees dissolve into the sky.
+    scene.fogColor = new Color3(0.72, 0.86, 0.96);
     scene.fogDensity = 0.011;
+    // The dungeon sets its own ambient tint; clear it so the camp is not lit
+    // differently after a castle run than on a fresh load.
+    scene.ambientColor = Color3.Black();
+  }
+
+  /** Per-frame polish for the camp, currently just the drifting clouds. */
+  update(dt: number): void {
+    this.sky.update?.(dt);
   }
 
   async build(): Promise<void> {
@@ -94,7 +103,8 @@ export class HubScene {
     await this.buildGate();
     await this.buildCastle();
     await this.buildStalls();
-    await this.scatterForest();
+    await this.buildCampDressing();
+    await this.buildForest();
 
     this.colliders.push(aabbFromCenter(0, -20.6, 5, 2));
   }
@@ -127,7 +137,10 @@ export class HubScene {
   }
 
   private buildGround(): void {
-    const ground = MeshBuilder.CreateGround('hub-ground', { width: 96, height: 96 }, this.scene);
+    // Far wider than the playable bounds so the horizon is always ground and
+    // haze, never a visible edge. The material is a flat colour, so the extra
+    // area costs nothing.
+    const ground = MeshBuilder.CreateGround('hub-ground', { width: 700, height: 700 }, this.scene);
     ground.parent = this.root;
     ground.position.y = -0.06;
     const material = new StandardMaterial('hub-ground-mat', this.scene);
@@ -242,6 +255,90 @@ export class HubScene {
     return box;
   }
 
+  /**
+   * Hand-placed camp dressing: fences, lanterns, benches and clutter that make
+   * the clearing feel lived in rather than an empty field.
+   */
+  private async buildCampDressing(): Promise<void> {
+    const rng = createRng(0xca11);
+
+    // Fence panels lining the approach to the gate, broken on one side.
+    for (let z = 14; z >= 9; z -= 2) {
+      for (const side of [-1, 1]) {
+        const broken = side < 0 && z <= 10;
+        await this.place('town', broken ? 'fence-broken' : 'fence', side * 3.1, z, {
+          targetHeight: 1.1,
+          rotY: Math.PI / 2,
+          collider: { halfX: 0.25, halfZ: 1 },
+        });
+      }
+    }
+
+    // Lanterns bracketing the road down to the gate, inside the fence line.
+    for (const z of [13, 6.5, 0.5, -5.5, -11.5]) {
+      for (const side of [-1, 1]) {
+        await this.place('town', 'lantern', side * 2.5, z, {
+          targetHeight: 3.1,
+          collider: { halfX: 0.2, halfZ: 0.2 },
+        });
+      }
+    }
+
+    // Clutter clustered out of the walking line.
+    const clusters = [
+      { x: -13, z: 12.5 },
+      { x: 13.5, z: 11.5 },
+      { x: -14, z: -10 },
+      { x: 13, z: -12 },
+      { x: -11.5, z: 2 },
+      { x: 11.5, z: -1 },
+    ];
+    for (const cluster of clusters) {
+      await this.place('mini', 'barrel', cluster.x, cluster.z, {
+        scale: 3.2,
+        rotY: rng.floatBetween(0, Math.PI * 2),
+        collider: { halfX: 0.8, halfZ: 0.8 },
+      });
+      await this.place('mini', 'barrel', cluster.x + 1.4, cluster.z + 0.9, {
+        scale: 2.8,
+        rotY: rng.floatBetween(0, Math.PI * 2),
+      });
+      await this.place('mini', 'pot', cluster.x - 1.3, cluster.z + 0.7, {
+        scale: 2.4,
+        collider: { halfX: 0.5, halfZ: 0.5 },
+      });
+    }
+
+    // A small staging table and planks beside the training stall.
+    await this.place('town', 'planks-half', 10.5, 8.5, { scale: 3.2, rotY: 0.4 });
+    await this.place('mini', 'table', 12.5, 6.5, {
+      scale: 2.6,
+      rotY: -0.5,
+      collider: { halfX: 1, halfZ: 0.6 },
+    });
+
+    // Second cart and a scatter of stones in the clearing.
+    await this.place('town', 'cart', 13, -9, {
+      scale: 3,
+      rotY: -0.7,
+      collider: { halfX: 1.6, halfZ: 1.4 },
+    });
+    for (let i = 0; i < 12; i += 1) {
+      const angle = rng.floatBetween(0, Math.PI * 2);
+      const radius = rng.floatBetween(10, 21);
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      // Keep the road and the gate approach clear.
+      if (Math.abs(x) < 4.5 || (Math.abs(x) < 8 && z > -22 && z < 2)) {
+        continue;
+      }
+      await this.place('town', 'rock-small', x, z, {
+        scale: rng.floatBetween(0.9, 1.5),
+        rotY: rng.floatBetween(0, Math.PI * 2),
+      });
+    }
+  }
+
   private async buildStalls(): Promise<void> {
     const stalls = [
       { id: 'bows', label: 'Bows', x: -8, z: 5, facing: Math.PI / 2, kit: 'town', name: 'stall-red' },
@@ -264,6 +361,16 @@ export class HubScene {
       const signX = stall.x + (stall.x < 0 ? 1.7 : -1.7);
       this.addSign(stall.label, signX, 2.7, stall.z, -stall.facing);
 
+      // A bench and a stool at the stall front make the merchants feel set up.
+      const inward = stall.x < 0 ? 1 : -1;
+      await this.place('town', 'stall-bench', stall.x + inward * 2.8, stall.z + 1.5, {
+        targetHeight: 1,
+        rotY: stall.facing,
+      });
+      await this.place('town', 'stall-stool', stall.x + inward * 3.2, stall.z - 1.4, {
+        targetHeight: 0.8,
+      });
+
       this.interactables.push({
         id: stall.id,
         label: stall.label,
@@ -278,36 +385,106 @@ export class HubScene {
     await this.place('mini', 'pot', 5.5, 6.5, { scale: 2.6, collider: { halfX: 0.6, halfZ: 0.6 } });
   }
 
-  private async scatterForest(): Promise<void> {
+  /**
+   * Rings the clearing with a dense treeline so Sherwood reads as a camp deep
+   * in a forest. The fog fades the furthest bands into the sky, which gives the
+   * canopy real depth without any extra work.
+   */
+  private async buildForest(): Promise<void> {
     const rng = createRng(0x5eed);
     const trees = ['tree', 'tree-high', 'tree-crooked', 'tree-high-crooked'];
 
-    for (let i = 0; i < 46; i += 1) {
+    // Loose trees inside the clearing, kept off the road, the camp core and the
+    // castle footprint.
+    for (let i = 0; i < 36; i += 1) {
       const angle = rng.floatBetween(0, Math.PI * 2);
-      const radius = rng.floatBetween(17, 31);
+      const radius = rng.floatBetween(16, 30);
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
-      if (Math.abs(x) < 7 && z > -22 && z < 18) {
+      if (this.blocksCamp(x, z)) {
         continue;
       }
-      const name = rng.pick(trees);
-      await this.place('town', name, x, z, {
-        targetHeight: rng.floatBetween(6.5, 10),
-        rotY: rng.floatBetween(0, Math.PI * 2),
-        collider: { halfX: 0.5, halfZ: 0.5 },
-      });
+      await this.placeTree(trees, x, z, rng.floatBetween(6.5, 10), true, rng, true);
     }
 
-    for (let i = 0; i < 34; i += 1) {
-      const angle = (i / 34) * Math.PI * 2;
-      const radius = 33;
+    // Saplings and scrub along the base of the treeline so the forest floor has
+    // some height to it without walling the view off.
+    for (let i = 0; i < 44; i += 1) {
+      const angle = rng.floatBetween(0, Math.PI * 2);
+      const radius = rng.floatBetween(31, 42);
       const x = Math.cos(angle) * radius;
       const z = Math.sin(angle) * radius;
-      await this.place('town', i % 5 === 0 ? 'hedge-large' : 'hedge', x, z, {
-        scale: 3.6,
-        rotY: -angle,
+      await this.placeTree(trees, x, z, rng.floatBetween(2.5, 4.5), false, rng);
+    }
+
+    // Three bands of forest close off the horizon. Only the nearest band casts
+    // shadows; the outer two sit in the haze and read as depth.
+    const bands = [
+      { count: 52, min: 36, max: 52, shadow: true, minHeight: 7, maxHeight: 11 },
+      { count: 100, min: 54, max: 86, shadow: false, minHeight: 8, maxHeight: 13 },
+      { count: 150, min: 88, max: 160, shadow: false, minHeight: 9, maxHeight: 15 },
+    ];
+    for (const band of bands) {
+      for (let i = 0; i < band.count; i += 1) {
+        const angle = rng.floatBetween(0, Math.PI * 2);
+        const radius = rng.floatBetween(band.min, band.max);
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        const blocked = Math.abs(x) <= 34 && Math.abs(z) <= 34;
+        if (z < -18 && Math.abs(x) < 17) {
+          // Keep the castle's footprint clear of trees.
+          continue;
+        }
+        await this.placeTree(
+          trees,
+          x,
+          z,
+          rng.floatBetween(band.minHeight, band.maxHeight),
+          band.shadow,
+          rng,
+          blocked,
+        );
+      }
+    }
+
+    // Boulders tucked where the clearing meets the trees.
+    for (let i = 0; i < 14; i += 1) {
+      const angle = rng.floatBetween(0, Math.PI * 2);
+      const radius = rng.floatBetween(30, 44);
+      const x = Math.cos(angle) * radius;
+      const z = Math.sin(angle) * radius;
+      await this.place('town', rng.pick(['rock-small', 'rock-small', 'rock-wide']), x, z, {
+        scale: rng.floatBetween(1.2, 1.9),
+        rotY: rng.floatBetween(0, Math.PI * 2),
+        collider: Math.abs(x) <= 34 && Math.abs(z) <= 34 ? { halfX: 0.6, halfZ: 0.6 } : undefined,
       });
     }
+  }
+
+  /** True where a tree must not grow: the road, the camp core or the castle. */
+  private blocksCamp(x: number, z: number): boolean {
+    const onRoad = Math.abs(x) < 7 && z > -22 && z < 18;
+    const inCampCore = Math.abs(x) < 12 && z > -12 && z < 12;
+    const inCastle = z < -18 && Math.abs(x) < 17;
+    return onRoad || inCampCore || inCastle;
+  }
+
+  /** One jittered tree, optionally solid if it stands inside the play area. */
+  private async placeTree(
+    names: readonly string[],
+    x: number,
+    z: number,
+    height: number,
+    shadow: boolean,
+    rng: Rng,
+    collider = false,
+  ): Promise<void> {
+    await this.place('town', rng.pick(names), x, z, {
+      targetHeight: height,
+      rotY: rng.floatBetween(0, Math.PI * 2),
+      shadow,
+      collider: collider ? { halfX: 0.55, halfZ: 0.55 } : undefined,
+    });
   }
 
   private async place(
