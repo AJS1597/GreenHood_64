@@ -6,14 +6,27 @@ You raid a randomly generated two-floor castle, steal gold from chests and vault
 
 ## Status
 
-Playable loop taking shape:
+Non-combat base pass complete. Playable loop taking shape:
 
-- **Sherwood camp** (fixed hub): a forest clearing with a path, castle gate and four merchant stalls (Bows, Abilities, Training, Crowns). A subdued overcast sky with soft clouds and a diffuse sun.
-- **First-person controller**: pointer lock, WASD, sprint, crouch, head bob. Movement resolves against a reusable 2D collision system.
+- **Sherwood camp** (fixed hub): a forest clearing with a path, a stone castle keep, gatehouse and towers, plus four merchant stalls (Bows, Abilities, Training, Crowns). A subdued overcast sky with soft clouds and a diffuse sun.
+- **First-person controller**: pointer lock, WASD, sprint, crouch, head bob, plus a visible equipped bow. Movement resolves against a reusable 2D collision system with per-storey vertical spans.
 - **Progression**: gold (bows, training, gold abilities) and crowns (elite abilities), saved to `localStorage`.
-- **Castle run**: seeded two-floor dungeon with rooms, corridors, a stairwell, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.
+- **Castle run**: seeded two-floor dungeon with rooms, corridors, a real walkable staircase, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.
+- **Looting**: chests and keys are collected and removed from the world; chests are scaled to a readable size, and stone columns reach the ceiling and block movement.
+- **Combat**: intentionally not implemented on this branch. The bow is visible as a viewmodel only.
 
-Next up: king (+ bodyguards), guards with stealth/backstab, bow combat and looting.
+Next up: a separate combat branch with guard AI, bow shooting, player health/damage, stealth/backstab, and the king encounter.
+
+## Base pass fixes
+
+- Replaced the stair teleporter with a real walkable staircase and floor-height ramp.
+- Corrected stair orientation, shaft walls, and collision so both floors remain traversable.
+- Fixed first-floor ceiling / second-floor floor z-fighting.
+- Corrected the dungeon playable bounds, removing the invisible wall around the castle edge.
+- Aligned the castle exit door with the back wall and its collision plane.
+- Fixed chest/key collection so picked-up meshes disappear.
+- Scaled up chests, stretched columns to the ceiling, and gave columns collision.
+- Added the Sherwood castle facade and the visible bow viewmodel.
 
 ## Requirements
 

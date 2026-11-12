@@ -4,6 +4,7 @@ import {
   HemisphericLight,
   Light,
   Mesh,
+  MeshBuilder,
   PBRMaterial,
   PointLight,
   Scene,
@@ -12,13 +13,23 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
-import { FLOOR, generateDungeon, isFloor, type Dungeon, type FloorLayout } from '../core/dungeon';
+import { FLOOR, generateDungeon, isFloor, worldBoundsFor, type Dungeon, type FloorLayout } from '../core/dungeon';
 import type { AssetLibrary } from './AssetLibrary';
 import { createCastleSky, type Sky } from './Skybox';
 
 const TILE = 4;
 const WALL_H = 4.15;
-const FLOOR_H = 8.3;
+const FLOOR_H = WALL_H;
+/**
+ * Wall meshes are 4.15 m tall, the same as the ceiling plane. Shrinking them a
+ * hair stops their top faces z-fighting with the ceiling tiles.
+ */
+const WALL_SKIN = 0.985;
+/** Ceilings sit a hair below the storey plane so they never fight a floor. */
+const CEILING_DROP = 0.02;
+/** The stair flight is fitted into a single storey. */
+const STAIR_TOP_LOCAL_Z = 2.0;
+const STAIR_BOTTOM_LOCAL_Z = 3.4;
 
 export interface DungeonInteractable {
   id: string;
@@ -27,6 +38,7 @@ export interface DungeonInteractable {
   z: number;
   radius: number;
   floor: number;
+  mesh?: Mesh | null;
 }
 
 interface FloorData {
@@ -55,10 +67,11 @@ export class DungeonScene {
   private readonly sky: Sky;
   private readonly floorRoots: [TransformNode, TransformNode];
   private readonly floors: [FloorData, FloorData];
-  private readonly stairBase: { x: number; z: number };
-  private readonly stairTop: { x: number; z: number };
+  private readonly stairZ: number;
+  private readonly stairTopZ: number;
+  private readonly stairBottomZ: number;
+  private readonly stairHoleSouthZ: number;
   private cloneCounter = 0;
-  private transitionCooldown = 0;
 
   constructor(scene: Scene, library: AssetLibrary, seed: number) {
     this.library = library;
@@ -66,8 +79,12 @@ export class DungeonScene {
     this.dungeon = generateDungeon(seed);
     this.root = new TransformNode('dungeon-root', scene);
 
-    this.stairBase = { x: this.dungeon.stairs.x, z: this.dungeon.stairs.z + 1 };
-    this.stairTop = { x: this.dungeon.stairs.x, z: this.dungeon.stairs.z - 2 };
+    // The flight starts at the bottom landing and reaches one storey at the
+    // top landing; these anchors drive both the geometry and the height ramp.
+    this.stairZ = (this.dungeon.stairs.z - 1) * TILE;
+    this.stairTopZ = this.stairZ - STAIR_TOP_LOCAL_Z;
+    this.stairBottomZ = this.stairZ + STAIR_BOTTOM_LOCAL_Z;
+    this.stairHoleSouthZ = this.dungeon.stairs.z * TILE + TILE / 2;
     this.carveStairShaft();
 
     const ambient = new HemisphericLight('dungeon-ambient', new Vector3(0, 1, 0), scene);
@@ -100,8 +117,24 @@ export class DungeonScene {
     this.floorRoots[1]!.parent = this.root;
 
     this.floors = [
-      { colliders: [], bounds: boundsFor(this.dungeon.floors[0]), torches: [] },
-      { colliders: [], bounds: boundsFor(this.dungeon.floors[1]), torches: [] },
+      {
+        colliders: [],
+        bounds: worldBoundsFor(
+          this.dungeon.floors[0].width,
+          this.dungeon.floors[0].height,
+          TILE,
+        ),
+        torches: [],
+      },
+      {
+        colliders: [],
+        bounds: worldBoundsFor(
+          this.dungeon.floors[1].width,
+          this.dungeon.floors[1].height,
+          TILE,
+        ),
+        torches: [],
+      },
     ];
   }
 
@@ -128,15 +161,54 @@ export class DungeonScene {
   }
 
   get colliders(): Aabb2[] {
-    return this.floors[this.currentFloor]!.colliders;
+    return [...this.floors[0]!.colliders, ...this.floors[1]!.colliders];
   }
 
   get bounds(): Bounds2 {
-    return this.floors[this.currentFloor]!.bounds;
+    return this.floors[0]!.bounds;
   }
 
   get baseY(): number {
-    return this.currentFloor === 0 ? 0 : FLOOR_H;
+    return 0;
+  }
+
+  /**
+   * Walking-surface height at a world position. Outside the stairwell this is
+   * the active storey; inside it is the smooth ramp so the player walks up
+   * rather than teleporting.
+   */
+  groundHeightAt(x: number, z: number): number {
+    const stairX = this.dungeon.stairs.x * TILE;
+    const inStairWidth = Math.abs(x - stairX) <= TILE / 2;
+    if (inStairWidth && z <= this.stairHoleSouthZ && z >= this.stairTopZ) {
+      // Inside the upper-floor opening the stair ramp is the only surface.
+      return this.rampHeight(z);
+    }
+    if (inStairWidth && this.currentFloor === 0 && z > this.stairHoleSouthZ) {
+      // The first part of the flight runs underneath the upper floor. Only a
+      // ground-floor player can be down here; an upper-floor player walking
+      // over this spot is on the floor above, not on the ramp.
+      if (z < this.stairBottomZ) {
+        return this.rampHeight(z);
+      }
+      return 0;
+    }
+    return this.currentFloor * FLOOR_H;
+  }
+
+  private rampHeight(z: number): number {
+    const t = (this.stairBottomZ - z) / (this.stairBottomZ - this.stairTopZ);
+    return Math.max(0, Math.min(1, t)) * FLOOR_H;
+  }
+
+  /** Keep the visible storey and HUD in sync with the player's feet. */
+  syncPlayer(feetY: number): boolean {
+    const floor = feetY > FLOOR_H / 2 ? 1 : 0;
+    if (floor === this.currentFloor) {
+      return false;
+    }
+    this.setFloor(floor);
+    return true;
   }
 
   nearest(x: number, z: number): DungeonInteractable | null {
@@ -155,26 +227,14 @@ export class DungeonScene {
     return best;
   }
 
-  /**
-   * If the player is standing on a stair trigger, move them to the other floor.
-   * Returns the destination world position, or null when nothing happened.
-   */
-  tryUseStairs(x: number, z: number): { x: number; z: number } | null {
-    const now = performance.now();
-    if (now < this.transitionCooldown) {
-      return null;
+  /** Remove a collected chest/key from the world and the interaction list. */
+  take(item: DungeonInteractable): void {
+    const index = this.interactables.indexOf(item);
+    if (index >= 0) {
+      this.interactables.splice(index, 1);
     }
-    if (this.currentFloor === 0 && distanceToCell(x, z, this.stairBase) < TILE * 0.7) {
-      this.setFloor(1);
-      this.transitionCooldown = now + 900;
-      return { x: this.dungeon.stairs.x * TILE, z: (this.stairTop.z - 1) * TILE };
-    }
-    if (this.currentFloor === 1 && distanceToCell(x, z, this.stairTop) < TILE * 0.7) {
-      this.setFloor(0);
-      this.transitionCooldown = now + 900;
-      return { x: this.dungeon.stairs.x * TILE, z: (this.stairBase.z + 1) * TILE };
-    }
-    return null;
+    item.mesh?.dispose(false, true);
+    item.mesh = null;
   }
 
   /** Keep a few torch lights near the player so the castle stays readable. */
@@ -201,8 +261,10 @@ export class DungeonScene {
 
   private setFloor(floor: number): void {
     this.currentFloor = floor;
-    this.floorRoots[0]!.setEnabled(floor === 0);
-    this.floorRoots[1]!.setEnabled(floor === 1);
+    // Both storeys stay visible so the stairwell reads as a real connection;
+    // vertical collider spans keep the other floor's walls out of the way.
+    this.floorRoots[0]!.setEnabled(true);
+    this.floorRoots[1]!.setEnabled(true);
   }
 
   private async buildFloor(floorIndex: number): Promise<void> {
@@ -234,6 +296,7 @@ export class DungeonScene {
       z: number,
       rotationX: number,
       rotationY: number,
+      scaleY = 1,
     ): boolean => {
       const target = placed
         ? base.createInstance(`${base.name}-i${this.cloneCounter++}`)
@@ -243,7 +306,16 @@ export class DungeonScene {
       target.rotationQuaternion = null;
       target.position.set(x, y, z);
       target.rotation.set(rotationX, rotationY, 0);
+      target.scaling.set(1, scaleY, 1);
       return true;
+    };
+
+    const addWallCollider = (cx: number, cz: number, halfX: number, halfZ: number): void => {
+      colliders.push({
+        ...aabbFromCenter(cx, cz, halfX, halfZ),
+        minY: baseY,
+        maxY: baseY + WALL_H,
+      });
     };
 
     for (let z = 1; z < layout.height - 1; z += 1) {
@@ -257,25 +329,73 @@ export class DungeonScene {
         if (!this.isFloorHole(floorIndex, x, z)) {
           floorPlaced = place(floorMesh, floorPlaced, worldX, baseY, worldZ, 0, 0);
         }
+        // Always build the lower ceiling. The upper floor tile is left in
+        // place above it, but its underside samples the kit's blue back-face;
+        // a 2 cm drop makes this tile the visible ceiling from below and stops
+        // the two coplanar surfaces fighting.
         if (!this.isCeilingHole(floorIndex, x, z)) {
-          floorPlaced = place(floorMesh, floorPlaced, worldX, baseY + WALL_H, worldZ, Math.PI, 0);
+          floorPlaced = place(
+            floorMesh,
+            floorPlaced,
+            worldX,
+            baseY + WALL_H - CEILING_DROP,
+            worldZ,
+            Math.PI,
+            0,
+          );
         }
 
         if (!isFloor(layout, x, z - 1)) {
-          wallPlaced = place(wallMesh, wallPlaced, worldX, baseY, worldZ - TILE / 2, 0, 0);
-          colliders.push(aabbFromCenter(worldX, worldZ - TILE / 2, TILE / 2, 0.2));
+          wallPlaced = place(
+            wallMesh,
+            wallPlaced,
+            worldX,
+            baseY,
+            worldZ - TILE / 2,
+            0,
+            0,
+            WALL_SKIN,
+          );
+          addWallCollider(worldX, worldZ - TILE / 2, TILE / 2, 0.2);
         }
         if (!isFloor(layout, x, z + 1)) {
-          wallPlaced = place(wallMesh, wallPlaced, worldX, baseY, worldZ + TILE / 2, 0, Math.PI);
-          colliders.push(aabbFromCenter(worldX, worldZ + TILE / 2, TILE / 2, 0.2));
+          wallPlaced = place(
+            wallMesh,
+            wallPlaced,
+            worldX,
+            baseY,
+            worldZ + TILE / 2,
+            0,
+            Math.PI,
+            WALL_SKIN,
+          );
+          addWallCollider(worldX, worldZ + TILE / 2, TILE / 2, 0.2);
         }
         if (!isFloor(layout, x - 1, z)) {
-          wallPlaced = place(wallMesh, wallPlaced, worldX - TILE / 2, baseY, worldZ, 0, Math.PI / 2);
-          colliders.push(aabbFromCenter(worldX - TILE / 2, worldZ, 0.2, TILE / 2));
+          wallPlaced = place(
+            wallMesh,
+            wallPlaced,
+            worldX - TILE / 2,
+            baseY,
+            worldZ,
+            0,
+            Math.PI / 2,
+            WALL_SKIN,
+          );
+          addWallCollider(worldX - TILE / 2, worldZ, 0.2, TILE / 2);
         }
         if (!isFloor(layout, x + 1, z)) {
-          wallPlaced = place(wallMesh, wallPlaced, worldX + TILE / 2, baseY, worldZ, 0, -Math.PI / 2);
-          colliders.push(aabbFromCenter(worldX + TILE / 2, worldZ, 0.2, TILE / 2));
+          wallPlaced = place(
+            wallMesh,
+            wallPlaced,
+            worldX + TILE / 2,
+            baseY,
+            worldZ,
+            0,
+            -Math.PI / 2,
+            WALL_SKIN,
+          );
+          addWallCollider(worldX + TILE / 2, worldZ, 0.2, TILE / 2);
         }
 
         if ((x + z) % 5 === 0) {
@@ -299,40 +419,166 @@ export class DungeonScene {
 
   private async decorate(layout: FloorLayout, parent: TransformNode, floorIndex: number): Promise<void> {
     const baseY = floorIndex * FLOOR_H;
+    // The column asset is 1.1 m tall; stretch it to meet the ceiling.
+    const columnScale = WALL_H / 1.1;
+    // The scaled column is about 1.89 m across; give it a solid footprint.
+    const columnHalf = 0.9;
     for (const room of layout.rooms) {
-      const column = await this.cloneMesh('mini', 'column', parent);
-      if (column) {
-        column.position = new Vector3(room.x * TILE - 3, baseY, room.z * TILE - 3);
+      const offset = Math.max(2.4, room.radius * TILE - 2.2);
+      const corners = [
+        { x: room.x * TILE - offset, z: room.z * TILE - offset },
+        { x: room.x * TILE + offset, z: room.z * TILE - offset },
+        { x: room.x * TILE - offset, z: room.z * TILE + offset },
+        { x: room.x * TILE + offset, z: room.z * TILE + offset },
+      ];
+      for (const corner of corners) {
+        const column = await this.cloneMesh('mini', 'column', parent);
+        if (column) {
+          column.position = new Vector3(corner.x, baseY, corner.z);
+          column.scaling.setAll(columnScale);
+          this.floors[floorIndex]!.colliders.push({
+            ...aabbFromCenter(corner.x, corner.z, columnHalf, columnHalf),
+            minY: baseY,
+            maxY: baseY + WALL_H,
+          });
+        }
       }
       const banner = await this.cloneMesh('mini', 'banner', parent);
       if (banner) {
-        banner.position = new Vector3(room.x * TILE, baseY + 1.6, room.z * TILE - 3);
+        banner.position = new Vector3(room.x * TILE, baseY + 2.1, room.z * TILE - (room.radius * TILE - 2));
       }
     }
   }
 
   private async buildStairs(): Promise<void> {
-    const mesh = await this.cloneMesh('dungeon', 'stairs', this.root);
-    if (mesh) {
-      mesh.position = new Vector3(this.dungeon.stairs.x * TILE, 0, this.dungeon.stairs.z * TILE);
+    const stairX = this.dungeon.stairs.x * TILE;
+
+    // Build an open stone staircase from steps rather than the kit's fully
+    // walled stairwell chunk, whose closed ends fight the shaft design.
+    const stepCount = 14;
+    const run = (this.stairBottomZ - this.stairTopZ) / stepCount;
+    const rise = FLOOR_H / stepCount;
+    const stairMaterial = new StandardMaterial('dungeon-stairs-mat', this.scene);
+    stairMaterial.disableLighting = true;
+    stairMaterial.diffuseColor = Color3.Black();
+    stairMaterial.emissiveColor = new Color3(0.35, 0.36, 0.43);
+    stairMaterial.specularColor = Color3.Black();
+    stairMaterial.backFaceCulling = false;
+    stairMaterial.fogEnabled = true;
+    for (let i = 0; i < stepCount; i += 1) {
+      const height = rise * (i + 1);
+      const step = MeshBuilder.CreateBox(
+        `dungeon-step-${i}`,
+        { width: TILE - 0.3, height, depth: run },
+        this.scene,
+      );
+      step.parent = this.floorRoots[0]!;
+      step.position.set(stairX, height / 2, this.stairBottomZ - (i + 0.5) * run);
+      step.material = stairMaterial;
+      step.receiveShadows = false;
+    }
+
+    const addThinWall = async (
+      parent: TransformNode,
+      x: number,
+      y: number,
+      z: number,
+      rotY: number,
+    ): Promise<void> => {
+      const wall = await this.cloneMesh('dungeon', 'template-wall', parent);
+      if (!wall) {
+        return;
+      }
+      wall.rotationQuaternion = null;
+      wall.position.set(x, y, z);
+      wall.rotation.set(0, rotY, 0);
+      wall.scaling.set(1, WALL_SKIN, 0.125);
+      this.applyTileMaterial(wall, new Color3(0.55, 0.56, 0.64));
+    };
+
+    const floor0 = this.dungeon.floors[0];
+    const floor1 = this.dungeon.floors[1];
+    const stairCellX = this.dungeon.stairs.x;
+
+    // Close off the space underneath the upper landing on the ground floor,
+    // but only when that side is open. If it is solid the normal wall mesh is
+    // already there and a second wall would z-fight.
+    const northOpen = isFloor(floor0, stairCellX, this.dungeon.stairs.z - 2);
+    if (northOpen) {
+      await addThinWall(this.floorRoots[0]!, stairX, 0, this.stairTopZ, Math.PI);
+    }
+
+    // The normal floor-0 wall at the stair head is full height and would stop a
+    // climber just short of the landing. Replace it with a low barrier that
+    // still blocks someone walking under the stairs from the north.
+    this.floors[0]!.colliders = this.floors[0]!.colliders.filter((box) => {
+      const cx = (box.minX + box.maxX) / 2;
+      const cz = (box.minZ + box.maxZ) / 2;
+      return !(Math.abs(cx - stairX) < 0.01 && Math.abs(cz - this.stairTopZ) < 0.01);
+    });
+    this.floors[0]!.colliders.push({
+      ...aabbFromCenter(stairX, this.stairTopZ, TILE / 2, 0.2),
+      minY: 0,
+      maxY: FLOOR_H - 0.6,
+    });
+
+    // The upper floor opens into the stairwell; the south lip is closed and
+    // both flanks are kept solid up to the storey ceiling.
+    const holeCentreZ = (this.stairTopZ + this.stairHoleSouthZ) / 2;
+    const holeHalfZ = (this.stairHoleSouthZ - this.stairTopZ) / 2;
+    this.floors[1]!.colliders.push({
+      ...aabbFromCenter(stairX, this.stairHoleSouthZ, TILE / 2, 0.2),
+      minY: FLOOR_H,
+      maxY: FLOOR_H + WALL_H,
+    });
+    for (const side of [-1, 1]) {
+      this.floors[0]!.colliders.push({
+        ...aabbFromCenter(stairX + side * (TILE / 2), holeCentreZ, 0.2, holeHalfZ),
+        minY: 0,
+        maxY: FLOOR_H + WALL_H,
+      });
+    }
+
+    // Close the upper-floor sides and the south lip with walls. Only add a
+    // wall where the neighbouring cell is open; solid neighbours already have
+    // a normal wall. Thin slabs keep hallways outside the shaft usable.
+    await addThinWall(this.floorRoots[1]!, stairX, FLOOR_H, this.stairHoleSouthZ, Math.PI);
+    for (const side of [-1, 1]) {
+      for (let zCell = this.dungeon.stairs.z - 1; zCell <= this.dungeon.stairs.z; zCell += 1) {
+        const z = zCell * TILE;
+        const wallX = stairX + side * (TILE / 2 + 0.25);
+        if (isFloor(floor0, stairCellX + side, zCell)) {
+          await addThinWall(this.floorRoots[0]!, wallX, 0, z, side * (Math.PI / 2));
+        }
+        if (isFloor(floor1, stairCellX + side, zCell)) {
+          await addThinWall(this.floorRoots[1]!, wallX, FLOOR_H, z, side * (Math.PI / 2));
+        }
+      }
     }
   }
 
   private async buildEntrance(): Promise<void> {
+    const entrance = this.dungeon.entrance;
+    const entranceRoom = this.dungeon.floors[0].rooms.find((room) => room.kind === 'entrance');
+    const radius = entranceRoom?.radius ?? 2;
+    // The room's north wall face is one half-cell beyond its last floor cell.
+    const backWallZ = (entrance.z - radius - 0.5) * TILE;
+
     const mesh = await this.cloneMesh('dungeon', 'gate-door', this.floorRoots[0]!);
     if (mesh) {
-      mesh.position = new Vector3(
-        this.dungeon.entrance.x * TILE,
-        0,
-        (this.dungeon.entrance.z - 2) * TILE,
-      );
+      mesh.rotationQuaternion = null;
+      mesh.rotation.set(0, 0, 0);
+      // Keep the door flush with the wall face instead of floating a couple of
+      // cells into the room, and thin it so its front lines up with collision.
+      mesh.position.set(entrance.x * TILE, 0, backWallZ + 0.2);
+      mesh.scaling.set(1, WALL_H / 4.4, 0.4 / 1.4);
     }
     this.interactables.push({
       id: 'exit',
       label: 'Leave the castle',
-      x: this.dungeon.entrance.x * TILE,
-      z: this.dungeon.entrance.z * TILE,
-      radius: 3.2,
+      x: entrance.x * TILE,
+      z: backWallZ + 2.5,
+      radius: 2.8,
       floor: 0,
     });
   }
@@ -344,21 +590,25 @@ export class DungeonScene {
       const mesh = await this.cloneMesh('mini', 'chest', this.floorRoots[spot.floor]!);
       if (mesh) {
         mesh.position = new Vector3(x, 0, z);
+        // The kit chest is only 0.5 m wide; scale it up to a readable hoard.
+        mesh.scaling.setAll(3.2);
       }
       this.interactables.push({
         id: spot.locked ? 'chest-locked' : 'chest',
         label: spot.locked ? 'Locked chest' : 'Open chest',
         x,
         z,
-        radius: 2.2,
+        radius: 2.4,
         floor: spot.floor,
+        mesh,
       });
     }
 
     for (const spot of this.dungeon.keys) {
       const mesh = await this.cloneMesh('mini', 'key', this.floorRoots[0]!);
       if (mesh) {
-        mesh.position = new Vector3(spot.x * TILE, 0.6, spot.z * TILE);
+        mesh.position = new Vector3(spot.x * TILE, 1.05, spot.z * TILE);
+        mesh.scaling.setAll(2.3);
       }
       this.interactables.push({
         id: 'key',
@@ -367,6 +617,7 @@ export class DungeonScene {
         z: spot.z * TILE,
         radius: 2,
         floor: 0,
+        mesh,
       });
     }
   }
@@ -428,10 +679,12 @@ export class DungeonScene {
     const floor0 = this.dungeon.floors[0];
     const floor1 = this.dungeon.floors[1];
     const { x } = this.dungeon.stairs;
-    for (let z = this.dungeon.stairs.z - 3; z <= this.dungeon.stairs.z + 2; z += 1) {
+    // Ground floor: the stair footprint plus the bottom landing.
+    for (let z = this.dungeon.stairs.z - 1; z <= this.dungeon.stairs.z + 1; z += 1) {
       setFloorCell(floor0, x, z);
     }
-    for (let z = this.dungeon.stairs.z - 4; z <= this.dungeon.stairs.z; z += 1) {
+    // Upper floor: open the hole cells and keep the landings connected.
+    for (let z = this.dungeon.stairs.z - 2; z <= this.dungeon.stairs.z + 1; z += 1) {
       setFloorCell(floor1, x, z);
     }
   }
@@ -441,15 +694,6 @@ function setFloorCell(layout: FloorLayout, x: number, z: number): void {
   if (x > 0 && z > 0 && x < layout.width - 1 && z < layout.height - 1) {
     layout.cells[z * layout.width + x] = FLOOR;
   }
-}
-
-function boundsFor(layout: FloorLayout): Bounds2 {
-  return {
-    minX: TILE,
-    minZ: TILE,
-    maxX: (layout.width - 2) * TILE,
-    maxZ: (layout.height - 2) * TILE,
-  };
 }
 
 function firstMesh(meshes: AbstractMesh[] | undefined): Mesh | null {
@@ -464,8 +708,4 @@ function firstMesh(meshes: AbstractMesh[] | undefined): Mesh | null {
     }
   }
   return null;
-}
-
-function distanceToCell(x: number, z: number, cell: { x: number; z: number }): number {
-  return Math.hypot(x - cell.x * TILE, z - cell.z * TILE);
 }

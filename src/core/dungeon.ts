@@ -1,3 +1,4 @@
+import type { Bounds2 } from './collision';
 import { createRng, type Rng } from './rng';
 
 /** A single dungeon cell: 0 = solid rock, 1 = walkable floor. */
@@ -403,6 +404,19 @@ const NEIGHBOURS: ReadonlyArray<Point> = [
   { x: 0, z: 1 },
   { x: 0, z: -1 },
 ];
+
+/**
+ * Playable bounds for a grid. Walkable cells are 1..width-2, and their outer
+ * edges sit half a tile beyond the cell centres.
+ */
+export function worldBoundsFor(width: number, height: number, tile: number): Bounds2 {
+  return {
+    minX: tile / 2,
+    minZ: tile / 2,
+    maxX: (width - 1.5) * tile,
+    maxZ: (height - 1.5) * tile,
+  };
+}
 
 function get(cells: Uint8Array, width: number, x: number, z: number): number {
   if (x < 0 || z < 0 || x >= width) {

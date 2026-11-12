@@ -11,6 +11,18 @@ export interface Aabb2 {
   minZ: number;
   maxX: number;
   maxZ: number;
+  /**
+   * Optional vertical extent. A box with no Y range blocks at every height
+   * (the hub), while a dungeon wall can be limited to the storey it belongs to.
+   */
+  minY?: number;
+  maxY?: number;
+}
+
+/** Vertical extent of a moving body used to filter storey-specific colliders. */
+export interface VerticalSpan {
+  minY: number;
+  maxY: number;
 }
 
 export interface Bounds2 {
@@ -50,6 +62,7 @@ export function resolveCircle(
   boxes: readonly Aabb2[],
   bounds?: Bounds2,
   passes = 3,
+  span?: VerticalSpan,
 ): Point2 {
   let px = x;
   let pz = z;
@@ -57,6 +70,9 @@ export function resolveCircle(
   for (let pass = 0; pass < passes; pass += 1) {
     let moved = false;
     for (const box of boxes) {
+      if (!overlapsVertically(box, span)) {
+        continue;
+      }
       const nearestX = clamp(px, box.minX, box.maxX);
       const nearestZ = clamp(pz, box.minZ, box.maxZ);
       const dx = px - nearestX;
@@ -113,4 +129,18 @@ export function distanceToAabb(box: Aabb2, x: number, z: number): number {
   const dx = Math.max(box.minX - x, 0, x - box.maxX);
   const dz = Math.max(box.minZ - z, 0, z - box.maxZ);
   return Math.hypot(dx, dz);
+}
+
+/** True when a body's vertical span intersects a box's optional storey span. */
+export function overlapsVertically(box: Aabb2, span?: VerticalSpan): boolean {
+  if (!span) {
+    return true;
+  }
+  if (box.minY !== undefined && span.maxY <= box.minY) {
+    return false;
+  }
+  if (box.maxY !== undefined && span.minY >= box.maxY) {
+    return false;
+  }
+  return true;
 }

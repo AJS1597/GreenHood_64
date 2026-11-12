@@ -20,7 +20,7 @@ export const CONFIG = {
     /** Modular Dungeon wall / ceiling height. */
     wallHeight: 4.15,
     /** Vertical gap between dungeon floors. */
-    floorHeight: 8.3,
+    floorHeight: 4.15,
     /** Player collision radius. */
     playerRadius: 0.35,
     /** Camera height while standing. */
