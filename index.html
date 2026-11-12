@@ -28,6 +28,7 @@
       <div class="hud-wallet">
         <span class="pill is-gold"><span id="hud-gold">0</span> gold</span>
         <span class="pill is-crown"><span id="hud-crowns">0</span> crowns</span>
+        <span class="pill is-key" id="hud-keys-pill" hidden><span id="hud-keys">0</span> keys</span>
       </div>
       <div id="hud-health" class="hud-health" hidden>
         <div class="hud-health-bar"><div id="hud-health-fill" class="hud-health-fill"></div></div>
@@ -39,6 +40,10 @@
         <div class="hud-boss-text"><span id="hud-boss-value">240</span> / <span id="hud-boss-max">240</span></div>
       </div>
       <div id="hud-floor" class="hud-floor" hidden></div>
+      <div id="hud-minimap" class="hud-minimap" hidden>
+        <canvas id="minimap-canvas" width="200" height="200"></canvas>
+        <div id="minimap-floor" class="minimap-floor">Floor 1</div>
+      </div>
       <div id="hud-prompt" class="hud-prompt" hidden><kbd>E</kbd> <span id="hud-prompt-text"></span></div>
       <div id="hud-toast" class="hud-toast" hidden></div>
       <div class="hud-hint">WASD move &middot; Mouse or arrows look &middot; Shift sprint &middot; C crouch &middot; LMB fire &middot; RMB aim &middot; E interact</div>

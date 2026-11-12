@@ -50,6 +50,8 @@ export interface DungeonInteractable {
   radius: number;
   floor: number;
   mesh?: Mesh | null;
+  collider?: Aabb2;
+  auraLight?: PointLight | null;
 }
 
 interface FloorData {
@@ -261,6 +263,22 @@ export class DungeonScene {
     if (index >= 0) {
       this.interactables.splice(index, 1);
     }
+    if (item.collider) {
+      const colliders = this.floors[item.floor]!.colliders;
+      const index = colliders.indexOf(item.collider);
+      if (index >= 0) {
+        colliders.splice(index, 1);
+      }
+      item.collider = undefined;
+    }
+    if (item.auraLight) {
+      const lightIndex = this.lights.indexOf(item.auraLight);
+      if (lightIndex >= 0) {
+        this.lights.splice(lightIndex, 1);
+      }
+      item.auraLight.dispose();
+      item.auraLight = null;
+    }
     item.mesh?.dispose(false, false);
     item.mesh = null;
   }
@@ -463,7 +481,9 @@ export class DungeonScene {
         const column = await this.cloneMesh('mini', 'column', parent);
         if (column) {
           column.position = new Vector3(corner.x, baseY, corner.z);
-          column.scaling.setAll(columnScale);
+          // Keep the top face just below the next floor's floor plane; at full
+          // height it is coplanar with the upper-floor tiles and z-fights.
+          column.scaling.set(columnScale, columnScale * WALL_SKIN, columnScale);
           this.floors[floorIndex]!.colliders.push({
             ...aabbFromCenter(corner.x, corner.z, columnHalf, columnHalf),
             minY: baseY,
@@ -583,6 +603,7 @@ export class DungeonScene {
         }
       }
     }
+
   }
 
   private async buildEntrance(): Promise<void> {
@@ -617,9 +638,41 @@ export class DungeonScene {
       const z = spot.z * TILE;
       const mesh = await this.cloneMesh('mini', 'chest', this.floorRoots[spot.floor]!);
       if (mesh) {
-        mesh.position = new Vector3(x, 0, z);
+        mesh.position = new Vector3(x, spot.floor * FLOOR_H, z);
         // The kit chest is only 0.5 m wide; scale it up to a readable hoard.
         mesh.scaling.setAll(3.2);
+      }
+      const collider = {
+        ...aabbFromCenter(x, z, 0.8, 0.8),
+        minY: spot.floor * FLOOR_H,
+        maxY: spot.floor * FLOOR_H + 2.2,
+      };
+      this.floors[spot.floor]!.colliders.push(collider);
+      let auraLight: PointLight | null = null;
+      if (spot.locked && mesh) {
+        const goldMaterial = mesh.material?.clone(`${mesh.material.name}-locked-gold`);
+        if (goldMaterial) {
+          if (goldMaterial instanceof PBRMaterial) {
+            goldMaterial.albedoColor = new Color3(1, 0.82, 0.42);
+            goldMaterial.emissiveColor = new Color3(0.34, 0.22, 0.05);
+          } else if (goldMaterial instanceof StandardMaterial) {
+            goldMaterial.diffuseColor = new Color3(1, 0.82, 0.42);
+            goldMaterial.emissiveColor = new Color3(0.34, 0.22, 0.05);
+          }
+          mesh.material = goldMaterial;
+          for (const child of mesh.getChildMeshes()) {
+            child.material = goldMaterial;
+          }
+        }
+        auraLight = new PointLight(
+          `locked-chest-aura-${this.cloneCounter++}`,
+          new Vector3(x, spot.floor * FLOOR_H + 1.1, z),
+          this.scene,
+        );
+        auraLight.diffuse = new Color3(1, 0.8, 0.35);
+        auraLight.intensity = 0.55;
+        auraLight.range = 5;
+        this.lights.push(auraLight);
       }
       this.interactables.push({
         id: spot.locked ? 'chest-locked' : 'chest',
@@ -629,6 +682,8 @@ export class DungeonScene {
         radius: 2.4,
         floor: spot.floor,
         mesh,
+        collider,
+        auraLight,
       });
     }
 

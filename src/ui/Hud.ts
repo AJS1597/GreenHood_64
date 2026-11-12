@@ -6,6 +6,8 @@ export class Hud {
   private readonly toast: HTMLElement;
   private readonly gold: HTMLElement;
   private readonly crowns: HTMLElement;
+  private readonly keysPill: HTMLElement;
+  private readonly keysValue: HTMLElement;
   private readonly floor: HTMLElement;
   private readonly health: HTMLElement;
   private readonly healthFill: HTMLElement;
@@ -29,6 +31,8 @@ export class Hud {
     this.toast = require(document, 'hud-toast');
     this.gold = require(document, 'hud-gold');
     this.crowns = require(document, 'hud-crowns');
+    this.keysPill = require(document, 'hud-keys-pill');
+    this.keysValue = require(document, 'hud-keys');
     this.floor = require(document, 'hud-floor');
     this.health = require(document, 'hud-health');
     this.healthFill = require(document, 'hud-health-fill');
@@ -56,6 +60,15 @@ export class Hud {
   setWallet(gold: number, crowns: number): void {
     this.gold.textContent = String(gold);
     this.crowns.textContent = String(crowns);
+  }
+
+  setKeys(count: number | null): void {
+    if (count === null) {
+      this.keysPill.hidden = true;
+      return;
+    }
+    this.keysPill.hidden = false;
+    this.keysValue.textContent = String(count);
   }
 
   setPrompt(text: string | null): void {

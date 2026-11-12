@@ -73,7 +73,7 @@ interface Point {
   z: number;
 }
 
-const DEFAULTS = { width: 23, height: 23, attempts: 40 };
+const DEFAULTS = { width: 19, height: 19, attempts: 40 };
 
 /** Deterministic castle generation: two connected floors, objectives, loot. */
 export function generateDungeon(seed: number, options: DungeonOptions = {}): Dungeon {
@@ -102,15 +102,15 @@ function tryGenerate(seed: number, width: number, height: number, _rng?: unknown
   carveRoom(floor0, entrance.x, entrance.z, 2, 'entrance');
 
   // Stairwell: a shared cell both floors must reach.
-  const stairCell = pickFarCell(rng, floor0, entrance, 1);
+  const stairCell = pickFarCell(rng, floor0, entrance, 1, 2);
   forceConnect(floor1, stairCell, rng);
 
   // King's chamber high up, vault below.
-  const kingCell = pickFarCell(rng, floor1, stairCell, 3);
+  const kingCell = pickFarCell(rng, floor1, stairCell, 3, 3);
   const king: Room = { x: kingCell.x, z: kingCell.z, radius: 2, kind: 'king' };
   carveRoom(floor1, king.x, king.z, king.radius, 'king');
 
-  const vaultCell = pickFarCell(rng, floor0, entrance, 3);
+  const vaultCell = pickFarCell(rng, floor0, entrance, 3, 3);
   const vault: Room = { x: vaultCell.x, z: vaultCell.z, radius: 2, kind: 'vault' };
   carveRoom(floor0, vault.x, vault.z, vault.radius, 'vault');
 
@@ -156,10 +156,10 @@ function forceGenerate(seed: number, width: number, height: number): Dungeon {
   const floor1 = carveMaze(rng, width, height);
   const entrance = { x: 3, z: 3 };
   carveRoom(floor0, entrance.x, entrance.z, 2, 'entrance');
-  const stairCell = pickFarCell(rng, floor0, entrance, 1);
+  const stairCell = pickFarCell(rng, floor0, entrance, 1, 2);
   forceConnect(floor1, stairCell, rng);
-  const kingCell = pickFarCell(rng, floor1, stairCell, 2);
-  const vaultCell = pickFarCell(rng, floor0, entrance, 2);
+  const kingCell = pickFarCell(rng, floor1, stairCell, 2, 3);
+  const vaultCell = pickFarCell(rng, floor0, entrance, 2, 3);
   const king: Room = { x: kingCell.x, z: kingCell.z, radius: 2, kind: 'king' };
   const vault: Room = { x: vaultCell.x, z: vaultCell.z, radius: 2, kind: 'vault' };
   carveRoom(floor1, king.x, king.z, 2, 'king');
@@ -280,14 +280,27 @@ function forceConnect(floor: FloorLayout, target: Point, rng: Rng): void {
   }
 }
 
-function pickFarCell(rng: Rng, floor: FloorLayout, from: Point, minDistance: number): Point {
+function pickFarCell(
+  rng: Rng,
+  floor: FloorLayout,
+  from: Point,
+  minDistance: number,
+  margin = 1,
+): Point {
   const distances = bfs(floor, from);
   const candidates: Point[] = [];
   for (let z = 1; z < floor.height - 1; z += 1) {
     for (let x = 1; x < floor.width - 1; x += 1) {
       const index = z * floor.width + x;
       const distance = distances[index] ?? -1;
-      if (get(floor.cells, floor.width, x, z) === FLOOR && distance >= minDistance + 6) {
+      if (
+        get(floor.cells, floor.width, x, z) === FLOOR &&
+        distance >= minDistance + 6 &&
+        x >= margin &&
+        z >= margin &&
+        x < floor.width - margin &&
+        z < floor.height - margin
+      ) {
         candidates.push({ x, z });
       }
     }
