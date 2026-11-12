@@ -13,8 +13,10 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
+import { BOSS } from '../core/combat';
 import {
   FLOOR,
+  bodyguardCells,
   generateDungeon,
   isFloor,
   worldBoundsFor,
@@ -67,6 +69,8 @@ export class DungeonScene {
   readonly dungeon: Dungeon;
   readonly root: TransformNode;
   readonly guards: Guard[] = [];
+  /** The king, when this castle spawned a boss encounter. */
+  boss: Guard | null = null;
   interactables: DungeonInteractable[] = [];
   currentFloor = 0;
 
@@ -653,10 +657,18 @@ export class DungeonScene {
       }
       await this.spawnGuardAt(spot.floor, spot.x, spot.z);
     }
+    // The king holds court in his chamber on the upper floor, with bodyguards.
+    const king = this.dungeon.king;
+    await this.spawnBossEncounter(1, king.x, king.z, { hold: true });
   }
 
   /** Spawn an extra guard at a grid cell. Used by the combat test route. */
-  async spawnGuardAt(floorIndex: number, cellX: number, cellZ: number): Promise<Guard | null> {
+  async spawnGuardAt(
+    floorIndex: number,
+    cellX: number,
+    cellZ: number,
+    options: { boss?: boolean } = {},
+  ): Promise<Guard | null> {
     const layout = this.dungeon.floors[floorIndex];
     if (!layout) {
       return null;
@@ -681,6 +693,10 @@ export class DungeonScene {
         ),
         index,
         isBlocked: (x, z) => x === stair.x && (z === stair.z || z === stair.z - 1),
+        isBoss: options.boss,
+        radius: options.boss ? BOSS.radius : undefined,
+        height: options.boss ? BOSS.height : undefined,
+        tint: options.boss ? new Color3(BOSS.tint.r, BOSS.tint.g, BOSS.tint.b) : undefined,
       },
       { x: cellX, z: cellZ, floor: floorIndex },
       this.root,
@@ -691,11 +707,54 @@ export class DungeonScene {
     return guard;
   }
 
+  /**
+   * Spawn the king plus two flanking bodyguards around a cell. Used by the
+   * generated king's chamber and by the /combat testing arena.
+   */
+  async spawnBossEncounter(
+    floorIndex: number,
+    cellX: number,
+    cellZ: number,
+    options: { hold?: boolean; faceX?: number; faceZ?: number } = {},
+  ): Promise<Guard | null> {
+    const layout = this.dungeon.floors[floorIndex];
+    if (!layout) {
+      return null;
+    }
+    const boss = await this.spawnGuardAt(floorIndex, cellX, cellZ, { boss: true });
+    if (!boss) {
+      return null;
+    }
+    const spawned: Guard[] = [boss];
+
+    // Flank the king with two bodyguards, falling back to other nearby floor
+    // cells when the chamber is clipped by the map edge.
+    for (const spot of bodyguardCells(layout, { x: cellX, z: cellZ }).slice(0, 2)) {
+      const guard = await this.spawnGuardAt(floorIndex, spot.x, spot.z);
+      if (guard) {
+        spawned.push(guard);
+      }
+    }
+
+    for (const guard of spawned) {
+      if (options.hold) {
+        guard.hold(999);
+      }
+      if (options.faceX !== undefined && options.faceZ !== undefined) {
+        guard.lookAt(options.faceX, options.faceZ);
+      }
+    }
+
+    this.boss = boss;
+    return boss;
+  }
+
   clearGuards(): void {
     for (const guard of this.guards) {
       guard.dispose();
     }
     this.guards.length = 0;
+    this.boss = null;
   }
 
   private async cloneMesh(kit: 'dungeon' | 'mini', name: string, parent: TransformNode): Promise<Mesh | null> {

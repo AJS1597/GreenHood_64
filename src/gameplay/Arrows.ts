@@ -181,6 +181,8 @@ export class ArrowSystem {
               guard.x,
               guard.z,
               guard.floor * floorHeight,
+              guard.radius,
+              guard.height,
             )
           ) {
             onGuardHit(guard, arrow.damage, arrow.position.clone());

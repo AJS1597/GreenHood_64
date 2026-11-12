@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  BOSS,
   COMBAT,
   bowStats,
   canTakedown,
@@ -11,6 +12,7 @@ import {
   pointHitsGuard,
   pointHitsWall,
   visionDistance,
+  withinRadius,
 } from '../src/core/combat';
 import { FLOOR, type FloorLayout } from '../src/core/dungeon';
 
@@ -97,5 +99,22 @@ describe('combat math', () => {
     expect(canTakedown(0, 0, 0, 0, -1, false, false)).toBe(false);
     expect(canTakedown(0, 0, 0, 0, -1, true, true)).toBe(false);
     expect(canTakedown(0, 0, 0, 0, -5, true, false)).toBe(false);
+  });
+
+  it('tests the boss slam radius', () => {
+    expect(withinRadius(0, 0, 0, 0, BOSS.aoeRadius)).toBe(true);
+    expect(withinRadius(0, 0, BOSS.aoeRadius - 0.01, 0, BOSS.aoeRadius)).toBe(true);
+    expect(withinRadius(0, 0, BOSS.aoeRadius + 0.01, 0, BOSS.aoeRadius)).toBe(false);
+    // Diagonal distance is measured properly, not per-axis.
+    const diagonal = BOSS.aoeRadius * 0.8;
+    expect(withinRadius(0, 0, diagonal, diagonal, BOSS.aoeRadius)).toBe(false);
+  });
+
+  it('gives the king a tougher, larger profile than a guard', () => {
+    expect(BOSS.health).toBeGreaterThan(COMBAT.guardHealth);
+    expect(BOSS.radius).toBeGreaterThan(COMBAT.guardRadius);
+    expect(BOSS.height).toBeGreaterThan(COMBAT.guardHeight);
+    expect(BOSS.crownReward).toBeGreaterThan(0);
+    expect(BOSS.aoeDamage).toBeGreaterThan(0);
   });
 });

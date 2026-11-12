@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bfs, findPath, generateDungeon, isFloor, isPlayable, reachable, worldBoundsFor } from '../src/core/dungeon';
+import { bodyguardCells, bfs, findPath, generateDungeon, isFloor, isPlayable, reachable, worldBoundsFor } from '../src/core/dungeon';
 
 function hashCells(cells: Uint8Array): number {
   let hash = 2166136261 >>> 0;
@@ -43,6 +43,21 @@ describe('dungeon generation', () => {
     const dungeon = generateDungeon(11);
     const floor1 = dungeon.floors[1]!;
     expect(reachable(floor1, dungeon.stairs, dungeon.king)).toBe(true);
+  });
+
+  it('always leaves room for two bodyguards around the king', () => {
+    for (let seed = 1; seed <= 60; seed += 1) {
+      const dungeon = generateDungeon(seed);
+      const floor1 = dungeon.floors[1]!;
+      const cells = bodyguardCells(floor1, dungeon.king);
+      expect(cells.length).toBeGreaterThanOrEqual(2);
+      // Distinct floor cells, never on top of the king.
+      expect(new Set(cells.map((cell) => `${cell.x},${cell.z}`)).size).toBe(cells.length);
+      for (const cell of cells) {
+        expect(isFloor(floor1, cell.x, cell.z)).toBe(true);
+        expect(cell.x === dungeon.king.x && cell.z === dungeon.king.z).toBe(false);
+      }
+    }
   });
 
   it('carves full square objective rooms', () => {

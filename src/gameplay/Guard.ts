@@ -10,10 +10,12 @@ import {
   type Scene,
 } from '@babylonjs/core';
 import {
+  BOSS,
   COMBAT,
   canTakedown,
   guardCanSee,
   hasLineOfSight,
+  withinRadius,
   type Point2,
 } from '../core/combat';
 import { findPath, isFloor, type FloorLayout } from '../core/dungeon';
@@ -42,6 +44,13 @@ export interface GuardContext {
   rng: Rng;
   index: number;
   isBlocked?: (x: number, z: number) => boolean;
+  /** Boss variant: larger, red-tinted, slams radially and is takedown-immune. */
+  isBoss?: boolean;
+  /** Capsule overrides so a scaled boss still takes arrow hits. */
+  radius?: number;
+  height?: number;
+  /** Albedo tint applied to this guard's own material clones. */
+  tint?: Color3;
 }
 
 export interface GuardPlayerView {
@@ -60,10 +69,12 @@ export interface GuardPlayerView {
 export class Guard {
   readonly root: TransformNode;
   readonly floor: number;
-  readonly radius = COMBAT.guardRadius;
-  readonly height = COMBAT.guardHeight;
+  readonly isBoss: boolean;
+  readonly radius: number;
+  readonly height: number;
+  readonly maxHealth: number;
   state: GuardState = 'patrol';
-  health = COMBAT.guardHealth;
+  health: number;
   x: number;
   z: number;
   yaw: number;
@@ -96,6 +107,8 @@ export class Guard {
   private markerState = '';
   private lastKnown: Point2 | null = null;
   private moving = false;
+  private aoeWindupTimer = 0;
+  private aoeRing: Mesh | null = null;
 
   private constructor(
     context: GuardContext,
@@ -110,6 +123,11 @@ export class Guard {
     this.floorY = context.floorY;
     this.rng = context.rng;
     this.isBlocked = context.isBlocked;
+    this.isBoss = context.isBoss ?? false;
+    this.radius = context.radius ?? COMBAT.guardRadius;
+    this.height = context.height ?? COMBAT.guardHeight;
+    this.maxHealth = this.isBoss ? BOSS.health : COMBAT.guardHealth;
+    this.health = this.maxHealth;
     this.spawnCell = { x: spawn.x, z: spawn.z };
     this.x = spawn.x * context.tile;
     this.z = spawn.z * context.tile;
@@ -144,6 +162,10 @@ export class Guard {
     marker.material = markerMaterial;
     marker.setEnabled(false);
 
+    if (this.isBoss) {
+      this.aoeRing = this.createAoeRing(context.scene, context.index);
+    }
+
     this.setAnimation('idle_stand', true);
   }
 
@@ -172,9 +194,27 @@ export class Guard {
       mesh.isPickable = false;
       mesh.receiveShadows = false;
       mesh.alwaysSelectAsActiveMesh = true;
-      if (mesh.material instanceof PBRMaterial) {
+      // Tint by swapping in a private material clone so the king's colour can
+      // never bleed onto the guards that share the loaded container.
+      if (context.tint && mesh.material) {
+        const tinted = mesh.material.clone(`${mesh.material.name}-tinted`);
+        if (tinted) {
+          if (tinted instanceof PBRMaterial) {
+            tinted.albedoColor = new Color3(context.tint.r, context.tint.g, context.tint.b);
+            tinted.emissiveColor = new Color3(context.tint.r * 0.22, context.tint.g * 0.06, context.tint.b * 0.06);
+          } else if (tinted instanceof StandardMaterial) {
+            tinted.diffuseColor = new Color3(context.tint.r, context.tint.g, context.tint.b);
+            tinted.emissiveColor = new Color3(context.tint.r * 0.22, context.tint.g * 0.06, context.tint.b * 0.06);
+          }
+          mesh.material = tinted;
+        }
+      } else if (mesh.material instanceof PBRMaterial) {
         mesh.material.emissiveColor = new Color3(0.045, 0.045, 0.055);
       }
+    }
+
+    if (context.isBoss) {
+      root.scaling.setAll(BOSS.scale);
     }
 
     const animations = new Map<string, AnimationGroup>();
@@ -271,6 +311,13 @@ export class Guard {
         break;
     }
 
+    // A slam only exists while the king is actively engaged; drop the
+    // telegraph if the fight breaks off so the ring never lingers.
+    if (this.aoeWindupTimer > 0 && this.state !== 'alert') {
+      this.aoeWindupTimer = 0;
+      this.setAoeRingEnabled(false);
+    }
+
     this.applyMovementAnimation();
   }
 
@@ -315,6 +362,9 @@ export class Guard {
   }
 
   canBeTakenDown(playerX: number, playerZ: number, crouching: boolean): boolean {
+    if (this.isBoss) {
+      return false;
+    }
     return canTakedown(
       this.x,
       this.z,
@@ -327,10 +377,15 @@ export class Guard {
   }
 
   takeDown(): void {
-    if (this.state === 'dead') {
+    if (this.state === 'dead' || this.isBoss) {
       return;
     }
     this.die();
+  }
+
+  /** Aim the guard at a world position. Used when spawning fixed encounters. */
+  lookAt(x: number, z: number): void {
+    this.face(x, z);
   }
 
   dispose(): void {
@@ -338,9 +393,107 @@ export class Guard {
       group.dispose();
     }
     this.animations.clear();
+    this.aoeRing?.material?.dispose();
+    this.aoeRing = null;
     // Guard materials are instantiated clones, but their textures are shared
     // with the cached guard container. Never dispose textures here.
     this.root.dispose(false, false);
+  }
+
+  private createAoeRing(scene: Scene, index: number): Mesh {
+    const ring = MeshBuilder.CreateTorus(
+      `guard-aoe-${index}`,
+      { diameter: 2, thickness: 0.16, tessellation: 48 },
+      scene,
+    );
+    ring.parent = this.root;
+    ring.position.y = 0.06;
+    ring.isPickable = false;
+    ring.alwaysSelectAsActiveMesh = true;
+    const material = new StandardMaterial(`guard-aoe-mat-${index}`, scene);
+    material.diffuseColor = new Color3(0.9, 0.16, 0.14);
+    material.emissiveColor = new Color3(0.95, 0.18, 0.14);
+    material.specularColor = Color3.Black();
+    material.disableLighting = true;
+    material.backFaceCulling = false;
+    material.alpha = 0.5;
+    ring.material = material;
+    ring.setEnabled(false);
+    return ring;
+  }
+
+  /** Scale the telegraph ring so its world radius matches `worldRadius`. */
+  private updateAoeRing(worldRadius: number): void {
+    if (!this.aoeRing) {
+      return;
+    }
+    // The ring is parented to the scaled rig, so divide out the model scale.
+    this.aoeRing.scaling.setAll(Math.max(0.15, worldRadius) / BOSS.scale);
+  }
+
+  private setAoeRingEnabled(enabled: boolean): void {
+    this.aoeRing?.setEnabled(enabled);
+  }
+
+  /** Boss alert behaviour: chase until close, then telegraph and slam. */
+  private updateBossAlert(
+    dt: number,
+    player: GuardPlayerView,
+    distance: number,
+    sees: boolean,
+  ): void {
+    // Mid-slam: expand the telegraph and detonate when the windup elapses.
+    if (this.aoeWindupTimer > 0) {
+      this.aoeWindupTimer -= dt;
+      const progress = 1 - Math.max(0, this.aoeWindupTimer) / BOSS.aoeWindup;
+      this.updateAoeRing(BOSS.aoeRadius * progress);
+      if (this.aoeWindupTimer <= 0) {
+        this.detonateAoe(player);
+      }
+      return;
+    }
+
+    if (sees && distance <= BOSS.aoeTriggerRange && this.attackCooldown <= 0) {
+      this.aoeWindupTimer = BOSS.aoeWindup;
+      this.hitAnimTimer = BOSS.aoeWindup;
+      this.face(player.x, player.z);
+      this.setAnimation('hit_spear', false);
+      this.setAoeRingEnabled(true);
+      this.updateAoeRing(0.2);
+      return;
+    }
+
+    if (this.repathTimer <= 0) {
+      this.setPathToCell(this.cellOf(player.x, player.z));
+      this.repathTimer = 0.45;
+    }
+
+    if (sees && distance < 8) {
+      if (this.moveTowards(player.x, player.z, COMBAT.guardChaseSpeed, dt)) {
+        this.setAnimation('alerted_stand', true);
+      } else {
+        this.setAnimation('alerted_walk', true);
+      }
+      return;
+    }
+
+    if (this.followPath(dt, COMBAT.guardChaseSpeed)) {
+      this.setAnimation('alerted_walk', true);
+    } else {
+      this.setAnimation('alerted_stand', true);
+    }
+  }
+
+  private detonateAoe(player: GuardPlayerView): void {
+    this.aoeWindupTimer = 0;
+    this.attackCooldown = BOSS.aoeCooldown;
+    this.hitAnimTimer = 0.45;
+    this.setAoeRingEnabled(false);
+    this.face(player.x, player.z);
+    if (withinRadius(player.x, player.z, this.x, this.z, BOSS.aoeRadius)) {
+      this.onAttack?.(BOSS.aoeDamage);
+    }
+    this.setAnimation('alerted_stand', true);
   }
 
   private updatePatrol(dt: number): void {
@@ -389,6 +542,10 @@ export class Guard {
   }
 
   private updateAlert(dt: number, player: GuardPlayerView, distance: number, sees: boolean): void {
+    if (this.isBoss) {
+      this.updateBossAlert(dt, player, distance, sees);
+      return;
+    }
     if (this.attacking) {
       this.attackWindup -= dt;
       if (this.attackWindup <= 0) {
@@ -581,6 +738,7 @@ export class Guard {
     this.health = 0;
     this.deadTimer = 0;
     this.marker.setEnabled(false);
+    this.setAoeRingEnabled(false);
     for (const group of this.animations.values()) {
       group.stop();
     }

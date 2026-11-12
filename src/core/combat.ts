@@ -41,6 +41,43 @@ export const COMBAT = {
 
 export type NoiseLevel = 'still' | 'crouch' | 'walk' | 'sprint';
 
+/**
+ * The king boss. He shares the guard rig but is bigger, redder, much tougher
+ * and attacks with a telegraphed radial slam instead of a spear.
+ */
+export const BOSS = {
+  name: 'The King',
+  health: 240,
+  /** Larger capsule so arrows still connect on the scaled model. */
+  radius: 0.55,
+  height: 2.15,
+  /** Uniform model scale applied to the guard rig. */
+  scale: 1.25,
+  /** Radial slam: telegraph, damage radius, cadence and trigger distance. */
+  aoeRadius: 5,
+  aoeWindup: 1.1,
+  aoeCooldown: 3.2,
+  aoeDamage: 30,
+  aoeTriggerRange: 6.5,
+  /** Crowns awarded to the player when the king falls. */
+  crownReward: 2,
+  /** Albedo tint that marks the king out from his guards. */
+  tint: { r: 0.92, g: 0.22, b: 0.18 },
+};
+
+/** True when (bx, bz) lies within `radius` of (ax, az). Drives the boss slam. */
+export function withinRadius(
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+  radius: number,
+): boolean {
+  const dx = ax - bx;
+  const dz = az - bz;
+  return dx * dx + dz * dz <= radius * radius;
+}
+
 export interface BowStats {
   range: number;
   speed: number;
