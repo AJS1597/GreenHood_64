@@ -46,6 +46,7 @@ export class CombatSystem {
   constructor(
     scene: Scene,
     library: AssetLibrary,
+    private readonly canvas: HTMLCanvasElement,
     private readonly player: PlayerController,
     private readonly bow: BowViewModel,
     private readonly hud: Hud,
@@ -253,7 +254,7 @@ export class CombatSystem {
       if (!guard.isAlive || guard.floor !== this.dungeon.currentFloor || guard.isAlerted) {
         continue;
       }
-      if (Math.hypot(guard.x - pos.x, guard.z - pos.z) <= 2.6) {
+      if (Math.hypot(guard.x - pos.x, guard.z - pos.z) <= 3.0) {
         return 'Crouch behind guard to takedown';
       }
     }
@@ -316,14 +317,22 @@ export class CombatSystem {
         this.fire();
       }
     };
-    // Mouse events only: adding pointerdown/pointerup listeners alongside
-    // pointer lock can interfere with the mousemove stream that drives look.
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mouseup', onMouseUp);
-    this.disposers.push(
-      () => window.removeEventListener('mousedown', onMouseDown),
-      () => window.removeEventListener('mouseup', onMouseUp),
-    );
+    // Bind on both the canvas and window, using mouse and pointer events.
+    // Pointer lock retargets input to the canvas, while some browsers only
+    // deliver one event family. The charging guard makes duplicates harmless.
+    const targets: EventTarget[] = [this.canvas, window];
+    for (const target of targets) {
+      target.addEventListener('mousedown', onMouseDown as EventListener);
+      target.addEventListener('mouseup', onMouseUp as EventListener);
+      target.addEventListener('pointerdown', onMouseDown as EventListener);
+      target.addEventListener('pointerup', onMouseUp as EventListener);
+      this.disposers.push(
+        () => target.removeEventListener('mousedown', onMouseDown as EventListener),
+        () => target.removeEventListener('mouseup', onMouseUp as EventListener),
+        () => target.removeEventListener('pointerdown', onMouseDown as EventListener),
+        () => target.removeEventListener('pointerup', onMouseUp as EventListener),
+      );
+    }
   }
 
   private fire(): void {

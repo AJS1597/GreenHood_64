@@ -84,6 +84,7 @@ export class App {
     this.combat = new CombatSystem(
       this.host.scene,
       this.library,
+      canvas,
       this.player,
       this.bow,
       this.hud,
