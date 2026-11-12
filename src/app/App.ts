@@ -345,9 +345,10 @@ export class App {
             this.hud.setKeys(this.runKeys);
             this.castle.take(interactable);
             this.player.colliders = this.castle.colliders;
-            this.runGold += 50;
+            const lockedGold = Math.round(35 * (2 + Math.random() * 2));
+            this.runGold += lockedGold;
             this.refreshWallet();
-            this.hud.showToast('Locked chest opened (+50 gold)');
+            this.hud.showToast(`Locked chest opened (+${lockedGold} gold)`);
           } else {
             this.hud.showToast('It is locked tight');
           }

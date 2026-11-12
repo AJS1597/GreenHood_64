@@ -49,6 +49,7 @@ export interface DungeonInteractable {
   floor: number;
   mesh?: Mesh | null;
   collider?: Aabb2;
+  auraLight?: PointLight | null;
 }
 
 interface FloorData {
@@ -265,6 +266,14 @@ export class DungeonScene {
         colliders.splice(index, 1);
       }
       item.collider = undefined;
+    }
+    if (item.auraLight) {
+      const lightIndex = this.lights.indexOf(item.auraLight);
+      if (lightIndex >= 0) {
+        this.lights.splice(lightIndex, 1);
+      }
+      item.auraLight.dispose();
+      item.auraLight = null;
     }
     item.mesh?.dispose(false, false);
     item.mesh = null;
@@ -635,6 +644,32 @@ export class DungeonScene {
         maxY: spot.floor * FLOOR_H + 2.2,
       };
       this.floors[spot.floor]!.colliders.push(collider);
+      let auraLight: PointLight | null = null;
+      if (spot.locked && mesh) {
+        const goldMaterial = mesh.material?.clone(`${mesh.material.name}-locked-gold`);
+        if (goldMaterial) {
+          if (goldMaterial instanceof PBRMaterial) {
+            goldMaterial.albedoColor = new Color3(1, 0.82, 0.42);
+            goldMaterial.emissiveColor = new Color3(0.34, 0.22, 0.05);
+          } else if (goldMaterial instanceof StandardMaterial) {
+            goldMaterial.diffuseColor = new Color3(1, 0.82, 0.42);
+            goldMaterial.emissiveColor = new Color3(0.34, 0.22, 0.05);
+          }
+          mesh.material = goldMaterial;
+          for (const child of mesh.getChildMeshes()) {
+            child.material = goldMaterial;
+          }
+        }
+        auraLight = new PointLight(
+          `locked-chest-aura-${this.cloneCounter++}`,
+          new Vector3(x, spot.floor * FLOOR_H + 1.1, z),
+          this.scene,
+        );
+        auraLight.diffuse = new Color3(1, 0.8, 0.35);
+        auraLight.intensity = 0.55;
+        auraLight.range = 5;
+        this.lights.push(auraLight);
+      }
       this.interactables.push({
         id: spot.locked ? 'chest-locked' : 'chest',
         label: spot.locked ? 'Locked chest' : 'Open chest',
@@ -644,6 +679,7 @@ export class DungeonScene {
         floor: spot.floor,
         mesh,
         collider,
+        auraLight,
       });
     }
 
