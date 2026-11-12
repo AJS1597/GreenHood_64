@@ -51,7 +51,7 @@ Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for th
 | Action | Key |
 | --- | --- |
 | Move | `W` `A` `S` `D` |
-| Look | Mouse |
+| Look | Mouse or Arrow keys |
 | Sprint | `Shift` |
 | Crouch | `C` |
 | Charge / fire bow | Hold / release `LMB` |
