@@ -6,6 +6,7 @@ import { SceneHost } from '../world/SceneHost';
 import { ShowcaseScene } from '../world/ShowcaseScene';
 import { LoadingScreen } from '../ui/LoadingScreen';
 import { Hud } from '../ui/Hud';
+import { Minimap } from '../ui/Minimap';
 import { ShopPanel } from '../ui/ShopPanel';
 import { PlayerController } from '../gameplay/PlayerController';
 import { BowViewModel } from '../gameplay/BowViewModel';
@@ -51,6 +52,7 @@ export class App {
   private readonly debugSeed: HTMLElement | null;
   private readonly debugFps: HTMLElement | null;
   private readonly debugCombat: HTMLElement | null;
+  private readonly minimap: Minimap;
 
   readonly save: SaveStore;
 
@@ -59,6 +61,7 @@ export class App {
   private location: Location = 'hub';
   private state: AppState = 'boot';
   private debugTimer = 0;
+  private minimapTimer = 0;
 
   private runGold = 0;
   private runKeys = 0;
@@ -73,6 +76,7 @@ export class App {
     this.library = new AssetLibrary(this.host.scene);
     this.save = new SaveStore();
     this.hud = new Hud(document);
+    this.minimap = new Minimap(document);
     this.shop = new ShopPanel(document, this.save);
     this.player = new PlayerController(this.host.scene, canvas, this.save.current.settings);
     this.bow = new BowViewModel(
@@ -199,6 +203,20 @@ export class App {
         this.updateCombatTest(deltaMs);
       }
     }
+    if (this.location === 'castle' && this.castle && this.state === 'playing') {
+      this.minimapTimer += deltaMs;
+      if (this.minimapTimer >= 100) {
+        this.minimapTimer = 0;
+        const pos = this.player.position;
+        this.minimap.update(
+          this.castle.dungeon,
+          this.castle.currentFloor,
+          pos.x,
+          pos.z,
+          this.player.camera.rotation.y,
+        );
+      }
+    }
     this.updateLighting();
     this.updatePrompt();
 
@@ -321,11 +339,21 @@ export class App {
           this.hud.showToast('+35 gold');
           return;
         case 'chest-locked':
-          this.hud.showToast(this.runKeys > 0 ? 'Locked chest — a key is needed' : 'It is locked tight');
+          if (this.runKeys > 0) {
+            this.runKeys -= 1;
+            this.hud.setKeys(this.runKeys);
+            this.castle.take(interactable);
+            this.runGold += 50;
+            this.refreshWallet();
+            this.hud.showToast('Locked chest opened (+50 gold)');
+          } else {
+            this.hud.showToast('It is locked tight');
+          }
           return;
         case 'key':
           this.castle.take(interactable);
           this.runKeys += 1;
+          this.hud.setKeys(this.runKeys);
           this.hud.showToast('Key taken');
           return;
         default:
@@ -343,6 +371,7 @@ export class App {
       this.runSeed = randomSeed();
       this.runGold = 0;
       this.runKeys = 0;
+      this.hud.setKeys(0);
       const castle = new DungeonScene(this.host.scene, this.library, this.runSeed);
       await castle.build();
       if (this.combatTest) {
@@ -381,6 +410,8 @@ export class App {
         castle,
         playerMaxHealth(this.save.current.training.maxHealth),
       );
+      this.minimap.reset();
+      this.minimap.show();
       this.save.update((save) => {
         save.stats.runs += 1;
       });
@@ -459,6 +490,8 @@ export class App {
     this.player.camera.maxZ = 400;
     this.host.scene.clearColor = HUB_CLEAR;
     this.hud.setFloor(null);
+    this.hud.setKeys(null);
+    this.minimap.hide();
   }
 
   private applyCastleFloor(): void {

@@ -304,6 +304,10 @@ kbd {
   color: var(--crown);
 }
 
+.pill.is-key {
+  color: #b9d7ff;
+}
+
 .hud-prompt {
   position: absolute;
   left: 50%;
@@ -430,6 +434,33 @@ kbd {
 
 .fade.is-active {
   opacity: 1;
+}
+
+.hud-minimap {
+  position: absolute;
+  top: 56px;
+  right: 16px;
+  width: 200px;
+  padding: 8px;
+  border-radius: 10px;
+  background: rgba(5, 10, 8, 0.86);
+  border: 1px solid var(--panel-border);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.hud-minimap canvas {
+  display: block;
+  width: 184px;
+  height: 184px;
+  image-rendering: pixelated;
+}
+
+.minimap-floor {
+  margin-top: 4px;
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: var(--gold);
 }
 
 .hud-floor {
