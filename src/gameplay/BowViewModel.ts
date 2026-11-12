@@ -2,6 +2,7 @@ import {
   Color3,
   MeshBuilder,
   PBRMaterial,
+  StandardMaterial,
   TransformNode,
   Vector3,
   VertexBuffer,
@@ -126,6 +127,7 @@ export class BowViewModel {
   private async loadNockedArrow(): Promise<void> {
     const container = await this.library.load('custom', 'arrow');
     if (!container) {
+      this.createFallbackNockedArrow();
       return;
     }
     const instantiated = container.instantiateModelsToScene(
@@ -143,6 +145,25 @@ export class BowViewModel {
       mesh.alwaysSelectAsActiveMesh = true;
       mesh.receiveShadows = false;
     }
+    this.nockedRoot.position.copyFrom(this.nockedRest);
+    this.nockedReady = true;
+    this.nockedRoot.setEnabled(this.charging);
+  }
+
+  private createFallbackNockedArrow(): void {
+    const material = new StandardMaterial('nocked-arrow-fallback-mat', this.scene);
+    material.disableLighting = true;
+    material.diffuseColor = Color3.Black();
+    material.emissiveColor = new Color3(0.9, 0.85, 0.7);
+    material.specularColor = Color3.Black();
+    const box = MeshBuilder.CreateBox(
+      'nocked-arrow-fallback',
+      { width: 0.05, height: 0.05, depth: 0.9 },
+      this.scene,
+    );
+    box.parent = this.nockedRoot;
+    box.material = material;
+    box.isPickable = false;
     this.nockedRoot.position.copyFrom(this.nockedRest);
     this.nockedReady = true;
     this.nockedRoot.setEnabled(this.charging);

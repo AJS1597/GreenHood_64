@@ -144,6 +144,7 @@ export class App {
 
   private wireUi(): void {
     this.player.onLockChange = (locked) => {
+      this.combat.setInputEnabled(locked);
       if (locked) {
         this.resumeHint.hidden = true;
         this.state = 'playing';
@@ -264,12 +265,12 @@ export class App {
   }
 
   private updatePrompt(): void {
-    if (this.state !== 'playing' || !this.player.isLocked) {
+    if (this.state !== 'playing') {
       this.hud.setPrompt(null);
       return;
     }
     if (this.location === 'castle') {
-      const takedown = this.combat.takedownPrompt();
+      const takedown = this.combat.takedownHint();
       if (takedown) {
         this.hud.setPrompt(takedown);
         return;
@@ -390,6 +391,7 @@ export class App {
       // Show the resume prompt so the first click captures the mouse.
       this.pause();
     }
+    this.combat.setInputEnabled(this.state === 'playing');
     this.hud.showToast(
       this.combatTest
         ? 'Combat test — hold LMB to draw, release to fire'
@@ -415,6 +417,7 @@ export class App {
     }
     this.refreshWallet();
     this.state = 'playing';
+    this.combat.setInputEnabled(false);
     this.hud.showToast(banked > 0 ? `Banked ${banked} gold` : 'Back in Sherwood');
   }
 
@@ -435,6 +438,7 @@ export class App {
     this.runKeys = 0;
     this.refreshWallet();
     this.state = 'playing';
+    this.combat.setInputEnabled(false);
     this.hud.showToast(lost > 0 ? `You died — lost ${lost} gold` : 'You died');
   }
 
@@ -473,6 +477,7 @@ export class App {
 
   private openShop(tab: ShopTab): void {
     this.state = 'shop';
+    this.combat.setInputEnabled(false);
     this.hud.setPrompt(null);
     this.player.releaseLock();
     this.shop.show(tab);
@@ -485,6 +490,7 @@ export class App {
 
   private pause(): void {
     this.state = 'paused';
+    this.combat.setInputEnabled(false);
     this.resumeHint.hidden = false;
     this.hud.setPrompt(null);
   }

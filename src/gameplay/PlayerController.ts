@@ -140,13 +140,13 @@ export class PlayerController {
 
   update(deltaMs: number): void {
     const dt = Math.min(deltaMs, 100) / 1000;
+    this.updateCrouch();
     if (!this.locked) {
       this.decayVelocity(dt);
       this.updateGroundHeight(dt);
       this.syncCamera(dt);
       return;
     }
-    this.updateCrouch();
     this.updateMovement(dt);
     this.updateGroundHeight(dt);
     this.syncCamera(dt);
@@ -166,7 +166,7 @@ export class PlayerController {
         return;
       }
       this.keys.add(event.code);
-      if (event.code === 'KeyE' && this.locked) {
+      if (event.code === 'KeyE') {
         this.onInteract?.();
       }
     };

@@ -40,6 +40,7 @@ export class CombatSystem {
   private invulnerable = 0;
   private baseFov = 1.15;
   private takedownTarget: Guard | null = null;
+  private inputEnabled = false;
   private readonly disposers: Array<() => void> = [];
 
   constructor(
@@ -63,9 +64,14 @@ export class CombatSystem {
     this.baseFov = fov;
   }
 
+  setInputEnabled(enabled: boolean): void {
+    this.inputEnabled = enabled;
+  }
+
   enterCastle(dungeon: DungeonScene, maxHealth: number): void {
     this.dungeon = dungeon;
     this.active = true;
+    this.inputEnabled = false;
     this.maxHealth = maxHealth;
     this.health = maxHealth;
     this.charging = false;
@@ -101,6 +107,7 @@ export class CombatSystem {
 
   leaveCastle(): void {
     this.active = false;
+    this.inputEnabled = false;
     this.dungeon = null;
     this.charging = false;
     this.aiming = false;
@@ -234,6 +241,25 @@ export class CombatSystem {
     return this.takedownTarget ? 'Takedown guard' : null;
   }
 
+  takedownHint(): string | null {
+    if (!this.active || !this.dungeon) {
+      return null;
+    }
+    if (this.takedownTarget) {
+      return 'Takedown guard';
+    }
+    const pos = this.player.position;
+    for (const guard of this.dungeon.guards) {
+      if (!guard.isAlive || guard.floor !== this.dungeon.currentFloor || guard.isAlerted) {
+        continue;
+      }
+      if (Math.hypot(guard.x - pos.x, guard.z - pos.z) <= 2.6) {
+        return 'Crouch behind guard to takedown';
+      }
+    }
+    return null;
+  }
+
   debugLabel(): string {
     const alive = this.dungeon?.guards.filter((guard) => guard.isAlive).length ?? 0;
     return `${Math.ceil(this.health)}/${this.maxHealth} hp · ${alive} guards`;
@@ -260,7 +286,7 @@ export class CombatSystem {
 
   private bindInput(): void {
     const onMouseDown = (event: MouseEvent): void => {
-      if (!this.active || !this.player.isLocked) {
+      if (!this.active || !this.inputEnabled) {
         return;
       }
       if (event.button === 2) {
@@ -268,7 +294,7 @@ export class CombatSystem {
         event.preventDefault();
         return;
       }
-      if (event.button !== 0 || this.cooldown > 0) {
+      if (event.button !== 0 || this.cooldown > 0 || this.charging) {
         return;
       }
       // LMB charges and fires on its own; RMB is only the optional zoom.
@@ -290,11 +316,18 @@ export class CombatSystem {
         this.fire();
       }
     };
+    // Listen to both pointer and mouse events. Some browsers surface pointer
+    // lock clicks through one family but not the other; the charging guard
+    // makes the duplicate event a no-op.
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
+    window.addEventListener('pointerdown', onMouseDown);
+    window.addEventListener('pointerup', onMouseUp);
     this.disposers.push(
       () => window.removeEventListener('mousedown', onMouseDown),
       () => window.removeEventListener('mouseup', onMouseUp),
+      () => window.removeEventListener('pointerdown', onMouseDown),
+      () => window.removeEventListener('pointerup', onMouseUp),
     );
   }
 
