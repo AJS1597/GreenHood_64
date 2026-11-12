@@ -646,38 +646,55 @@ export class DungeonScene {
   }
 
   private async buildGuards(): Promise<void> {
-    for (let i = 0; i < this.dungeon.guards.length; i += 1) {
-      const spot = this.dungeon.guards[i];
+    for (const spot of this.dungeon.guards) {
       if (!spot) {
         continue;
       }
-      const floor = spot.floor;
-      const layout = this.dungeon.floors[floor];
-      if (!layout) {
-        continue;
-      }
-      const stair = this.dungeon.stairs;
-      const guard = await Guard.create(
-        {
-          scene: this.scene,
-          library: this.library,
-          floor: layout,
-          floorIndex: floor,
-          colliders: this.floors[floor]!.colliders,
-          tile: TILE,
-          floorY: floor * FLOOR_H,
-          rng: createRng((this.dungeon.seed ^ ((i + 1) * 2654435761)) >>> 0),
-          index: i,
-          isBlocked: (x, z) =>
-            x === stair.x && (z === stair.z || z === stair.z - 1),
-        },
-        spot,
-        this.root,
-      );
-      if (guard) {
-        this.guards.push(guard);
-      }
+      await this.spawnGuardAt(spot.floor, spot.x, spot.z);
     }
+  }
+
+  /** Spawn an extra guard at a grid cell. Used by the combat test route. */
+  async spawnGuardAt(floorIndex: number, cellX: number, cellZ: number): Promise<Guard | null> {
+    const layout = this.dungeon.floors[floorIndex];
+    if (!layout) {
+      return null;
+    }
+    const stair = this.dungeon.stairs;
+    const index = this.guards.length;
+    const guard = await Guard.create(
+      {
+        scene: this.scene,
+        library: this.library,
+        floor: layout,
+        floorIndex,
+        colliders: this.floors[floorIndex]!.colliders,
+        tile: TILE,
+        floorY: floorIndex * FLOOR_H,
+        rng: createRng(
+          (this.dungeon.seed ^
+            (cellX * 73856093) ^
+            (cellZ * 19349663) ^
+            (floorIndex * 83492791)) >>>
+            0,
+        ),
+        index,
+        isBlocked: (x, z) => x === stair.x && (z === stair.z || z === stair.z - 1),
+      },
+      { x: cellX, z: cellZ, floor: floorIndex },
+      this.root,
+    );
+    if (guard) {
+      this.guards.push(guard);
+    }
+    return guard;
+  }
+
+  clearGuards(): void {
+    for (const guard of this.guards) {
+      guard.dispose();
+    }
+    this.guards.length = 0;
   }
 
   private async cloneMesh(kit: 'dungeon' | 'mini', name: string, parent: TransformNode): Promise<Mesh | null> {

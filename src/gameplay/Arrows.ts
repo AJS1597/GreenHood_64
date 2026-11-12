@@ -39,15 +39,18 @@ export class ArrowSystem {
   constructor(private readonly scene: Scene) {
     this.root = new TransformNode('arrow-system', scene);
     this.shaftMaterial = new StandardMaterial('arrow-shaft-mat', scene);
-    this.shaftMaterial.diffuseColor = new Color3(0.45, 0.31, 0.17);
-    this.shaftMaterial.emissiveColor = new Color3(0.16, 0.1, 0.05);
+    this.shaftMaterial.diffuseColor = Color3.Black();
+    this.shaftMaterial.emissiveColor = Color3.White();
     this.shaftMaterial.specularColor = Color3.Black();
+    this.shaftMaterial.disableLighting = true;
+    this.shaftMaterial.backFaceCulling = false;
+    this.shaftMaterial.alpha = 0.95;
   }
 
   spawn(origin: Vector3, velocity: Vector3, damage: number, floor: number, lifetime: number): void {
     const mesh = MeshBuilder.CreateBox(
       `arrow-${this.arrows.length}-${performance.now()}`,
-      { width: 0.045, height: 0.045, depth: 0.6 },
+      { width: 0.07, height: 0.07, depth: 2.2 },
       this.scene,
     );
     mesh.parent = this.root;

@@ -1,3 +1,4 @@
+import { Vector3 } from '@babylonjs/core';
 import type { Scene } from '@babylonjs/core';
 import {
   COMBAT,
@@ -78,13 +79,17 @@ export class CombatSystem {
     this.player.camera.fov = this.baseFov;
 
     for (const guard of dungeon.guards) {
-      guard.onAttack = (damage) => this.damagePlayer(damage);
-      guard.onDeath = () => {
-        this.save.update((data) => {
-          data.stats.guardsKilled += 1;
-        });
-      };
+      this.attachGuard(guard);
     }
+  }
+
+  attachGuard(guard: Guard): void {
+    guard.onAttack = (damage) => this.damagePlayer(damage);
+    guard.onDeath = () => {
+      this.save.update((data) => {
+        data.stats.guardsKilled += 1;
+      });
+    };
   }
 
   leaveCastle(): void {
@@ -257,6 +262,7 @@ export class CombatSystem {
       if (event.button !== 0 || this.cooldown > 0) {
         return;
       }
+      event.preventDefault();
       this.charging = true;
       this.chargeTime = 0;
       this.charge = 0;
@@ -286,8 +292,18 @@ export class CombatSystem {
       return;
     }
     const stats = bowStats(this.save.current.bowTier, this.charge);
-    const direction = this.player.camera.getForwardRay(1).direction.normalize();
-    const origin = this.player.camera.position.add(direction.scale(COMBAT.arrowSpawnOffset));
+    const camera = this.player.camera;
+    const forward = camera.getForwardRay(1).direction.normalize();
+    const right = camera.getDirection(Vector3.Right()).normalize();
+    const up = camera.getDirection(Vector3.Up()).normalize();
+    // Start near the bow, then converge on the crosshair so the white streak is
+    // visible instead of collapsing to a dot straight down the view axis.
+    const origin = camera.position
+      .add(forward.scale(COMBAT.arrowSpawnOffset))
+      .add(right.scale(0.25))
+      .add(up.scale(-0.14));
+    const target = camera.position.add(forward.scale(100));
+    const direction = target.subtract(origin).normalize();
     this.arrows.spawn(
       origin,
       direction.scale(stats.speed),

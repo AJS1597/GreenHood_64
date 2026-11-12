@@ -397,6 +397,22 @@ kbd {
   opacity: 0.7;
 }
 
+.resume-link {
+  display: inline-block;
+  margin-top: 10px;
+  pointer-events: auto;
+  color: var(--gold);
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-decoration: none;
+  opacity: 0.8;
+}
+
+.resume-link:hover {
+  opacity: 1;
+  text-decoration: underline;
+}
+
 /* ---------- Fade ---------- */
 .fade {
   position: fixed;

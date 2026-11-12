@@ -274,6 +274,12 @@ export class Guard {
     this.applyMovementAnimation();
   }
 
+  /** Keep the guard stationary until it is disturbed. Used by /combat. */
+  hold(seconds: number): void {
+    this.pauseTimer = seconds;
+    this.path = [];
+  }
+
   /** Make the guard investigate a point, e.g. an arrow impact or a body. */
   alertAt(x: number, z: number): void {
     if (this.state === 'dead') {

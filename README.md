@@ -69,6 +69,8 @@ Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for th
 | `?castle=1` | Boot straight into a castle run |
 | `?castle=1&at=vault` | Spawn inside the vault |
 | `?castle=1&at=guard` | Spawn near the first guard |
+| `/combat` | Combat test arena: one guard in front of you, respawns after death |
+| `?view=combat` | Same combat test arena when path routing is unavailable |
 | `?god` | Disable player damage (debug) |
 | `scripts/shot.sh <url> <out.png>` | Headless screenshot helper (Firefox + geckodriver) |
 | `scripts/eval.sh <url> <js>` | Evaluate JS in the running page (debugging) |

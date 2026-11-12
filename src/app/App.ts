@@ -64,6 +64,8 @@ export class App {
   private runKeys = 0;
   private runSeed = 0;
   private debugAt: string | null = null;
+  private combatTest = false;
+  private testRespawnTimer = 0;
 
   constructor(canvas: HTMLCanvasElement, document: Document) {
     this.loading = new LoadingScreen(document);
@@ -98,6 +100,8 @@ export class App {
     DEBUG.enabled = params.has('debug');
     DEBUG.godMode = params.has('god');
     this.debugAt = params.get('at');
+    const path = window.location.pathname.replace(/\/+$/, '');
+    this.combatTest = path === '/combat' || params.get('view') === 'combat';
 
     if (params.get('view') === 'assets') {
       await this.startShowcase();
@@ -123,7 +127,7 @@ export class App {
     }
 
     // Debug entry point straight into a castle run.
-    if (params.has('castle')) {
+    if (params.has('castle') || this.combatTest) {
       await this.enterCastle();
     } else {
       this.pause();
@@ -158,7 +162,11 @@ export class App {
 
     // Clicking anywhere while paused recaptures the mouse; Escape also resumes
     // (rather than forcing a click on a full-screen overlay).
-    document.addEventListener('click', () => {
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('a')) {
+        return;
+      }
       if (this.state === 'paused') {
         this.resume();
       }
@@ -177,6 +185,9 @@ export class App {
     this.updateStairs();
     if (this.location === 'castle' && this.state === 'playing') {
       this.combat.update(deltaMs);
+      if (this.combatTest) {
+        this.updateCombatTest(deltaMs);
+      }
     }
     this.updateLighting();
     this.updatePrompt();
@@ -206,6 +217,36 @@ export class App {
     if (this.castle.syncPlayer(this.player.feet)) {
       this.applyCastleFloor();
     }
+  }
+
+  /** Keep a fresh target in front of the player while using /combat. */
+  private updateCombatTest(deltaMs: number): void {
+    if (!this.castle) {
+      return;
+    }
+    if (this.castle.guards.some((guard) => guard.isAlive)) {
+      this.testRespawnTimer = 0;
+      return;
+    }
+    if (this.testRespawnTimer <= 0) {
+      this.testRespawnTimer = 2.5;
+    }
+    this.testRespawnTimer -= deltaMs / 1000;
+    if (this.testRespawnTimer > 0) {
+      return;
+    }
+    this.testRespawnTimer = 0;
+    const entrance = this.castle.dungeon.entrance;
+    void this.castle
+      .spawnGuardAt(0, entrance.x, Math.max(1, entrance.z - 1))
+      .then((guard) => {
+        if (guard) {
+          guard.yaw = Math.PI;
+          guard.root.rotation.y = 0;
+          guard.hold(999);
+          this.combat.attachGuard(guard);
+        }
+      });
   }
 
   private updateLighting(): void {
@@ -294,6 +335,21 @@ export class App {
       this.runKeys = 0;
       const castle = new DungeonScene(this.host.scene, this.library, this.runSeed);
       await castle.build();
+      if (this.combatTest) {
+        castle.clearGuards();
+        const entrance = castle.dungeon.entrance;
+        const testGuard = await castle.spawnGuardAt(
+          0,
+          entrance.x,
+          Math.max(1, entrance.z - 1),
+        );
+        if (testGuard) {
+          testGuard.yaw = Math.PI;
+          testGuard.root.rotation.y = 0;
+          testGuard.hold(999);
+        }
+        this.testRespawnTimer = 0;
+      }
       this.castle = castle;
       this.location = 'castle';
       this.player.baseY = castle.baseY;
@@ -320,7 +376,11 @@ export class App {
       });
     });
     this.state = 'playing';
-    this.hud.showToast('Find the king or raid the vault — then return to the gate.');
+    this.hud.showToast(
+      this.combatTest
+        ? 'Combat test — hold LMB to draw, release to fire'
+        : 'Find the king or raid the vault — then return to the gate.',
+    );
   }
 
   private async leaveCastle(): Promise<void> {
