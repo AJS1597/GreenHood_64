@@ -9,7 +9,9 @@ import { Hud } from '../ui/Hud';
 import { ShopPanel } from '../ui/ShopPanel';
 import { PlayerController } from '../gameplay/PlayerController';
 import { BowViewModel } from '../gameplay/BowViewModel';
+import { CombatSystem } from '../gameplay/CombatSystem';
 import { DEBUG } from '../core/config';
+import { playerMaxHealth } from '../core/combat';
 import { formatSeed, randomSeed } from '../core/rng';
 import type { ShopTab } from '../core/shop';
 import { SaveStore } from './SaveStore';
@@ -41,12 +43,14 @@ export class App {
   private readonly shop: ShopPanel;
   private readonly player: PlayerController;
   private readonly bow: BowViewModel;
+  private readonly combat: CombatSystem;
   private readonly resumeHint: HTMLElement;
   private readonly fade: HTMLElement;
   private readonly debugState: HTMLElement | null;
   private readonly debugPos: HTMLElement | null;
   private readonly debugSeed: HTMLElement | null;
   private readonly debugFps: HTMLElement | null;
+  private readonly debugCombat: HTMLElement | null;
 
   readonly save: SaveStore;
 
@@ -75,6 +79,10 @@ export class App {
       this.player.camera,
       this.save.current.bowTier,
     );
+    this.combat = new CombatSystem(this.host.scene, this.player, this.bow, this.hud, this.save);
+    this.combat.onDeath = () => {
+      void this.dieInCastle();
+    };
 
     this.resumeHint = requiredElement(document, 'click-to-play');
     this.fade = requiredElement(document, 'fade');
@@ -82,11 +90,13 @@ export class App {
     this.debugPos = document.getElementById('debug-pos');
     this.debugSeed = document.getElementById('debug-seed');
     this.debugFps = document.getElementById('debug-fps');
+    this.debugCombat = document.getElementById('debug-combat');
   }
 
   async start(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     DEBUG.enabled = params.has('debug');
+    DEBUG.godMode = params.has('god');
     this.debugAt = params.get('at');
 
     if (params.get('view') === 'assets') {
@@ -126,6 +136,7 @@ export class App {
         this.resumeHint.hidden = true;
         this.state = 'playing';
       } else if (this.state === 'playing') {
+        this.combat.cancel();
         this.pause();
       }
     };
@@ -141,6 +152,7 @@ export class App {
       const save = this.save.current;
       this.refreshWallet();
       this.player.camera.fov = save.settings.fov;
+      this.combat.setBaseFov(save.settings.fov);
       void this.bow.setTier(save.bowTier);
     };
 
@@ -163,6 +175,9 @@ export class App {
   private update(deltaMs: number): void {
     this.player.update(deltaMs);
     this.updateStairs();
+    if (this.location === 'castle' && this.state === 'playing') {
+      this.combat.update(deltaMs);
+    }
     this.updateLighting();
     this.updatePrompt();
 
@@ -176,6 +191,10 @@ export class App {
         if (this.debugPos) this.debugPos.textContent = `${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}`;
         if (this.debugSeed)
           this.debugSeed.textContent = this.location === 'hub' ? 'hub' : formatSeed(this.runSeed);
+        if (this.debugCombat) {
+          this.debugCombat.textContent =
+            this.location === 'castle' ? this.combat.debugLabel() : '—';
+        }
       }
     }
   }
@@ -199,6 +218,13 @@ export class App {
     if (this.state !== 'playing' || !this.player.isLocked) {
       this.hud.setPrompt(null);
       return;
+    }
+    if (this.location === 'castle') {
+      const takedown = this.combat.takedownPrompt();
+      if (takedown) {
+        this.hud.setPrompt(takedown);
+        return;
+      }
     }
     const pos = this.player.position;
     const interactable =
@@ -226,6 +252,9 @@ export class App {
     }
 
     if (this.location === 'castle' && this.castle) {
+      if (this.combat.tryTakedown()) {
+        return;
+      }
       const interactable = this.castle.nearest(pos.x, pos.z);
       if (!interactable) {
         return;
@@ -278,6 +307,17 @@ export class App {
       this.player.camera.maxZ = 260;
       this.host.scene.clearColor = CASTLE_CLEAR;
       this.hud.setFloor(`Castle ${formatSeed(this.runSeed)} · Floor 1`);
+      if (this.debugAt === 'guard' && castle.guards[0]) {
+        const guard = castle.guards[0];
+        this.player.spawn(guard.x, guard.z + 4, Math.PI);
+      }
+      this.combat.enterCastle(
+        castle,
+        playerMaxHealth(this.save.current.training.maxHealth),
+      );
+      this.save.update((save) => {
+        save.stats.runs += 1;
+      });
     });
     this.state = 'playing';
     this.hud.showToast('Find the king or raid the vault — then return to the gate.');
@@ -286,6 +326,7 @@ export class App {
   private async leaveCastle(): Promise<void> {
     this.state = 'boot';
     this.hud.setPrompt(null);
+    this.combat.leaveCastle();
     const banked = this.runGold;
     await this.fadeThrough(async () => {
       this.castle?.dispose();
@@ -303,7 +344,28 @@ export class App {
     this.hud.showToast(banked > 0 ? `Banked ${banked} gold` : 'Back in Sherwood');
   }
 
+  private async dieInCastle(): Promise<void> {
+    if (this.state !== 'playing' && this.state !== 'paused') {
+      return;
+    }
+    this.state = 'boot';
+    this.hud.setPrompt(null);
+    this.combat.leaveCastle();
+    const lost = this.runGold;
+    await this.fadeThrough(async () => {
+      this.castle?.dispose();
+      this.castle = null;
+      await this.loadHub();
+    });
+    this.runGold = 0;
+    this.runKeys = 0;
+    this.refreshWallet();
+    this.state = 'playing';
+    this.hud.showToast(lost > 0 ? `You died — lost ${lost} gold` : 'You died');
+  }
+
   private async loadHub(): Promise<void> {
+    this.combat.leaveCastle();
     this.castle?.dispose();
     this.castle = null;
     const hub = new HubScene(this.host.scene, this.library);

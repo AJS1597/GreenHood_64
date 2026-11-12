@@ -13,9 +13,10 @@ Non-combat base pass complete. Playable loop taking shape:
 - **Progression**: gold (bows, training, gold abilities) and crowns (elite abilities), saved to `localStorage`.
 - **Castle run**: seeded two-floor dungeon with rooms, corridors, a real walkable staircase, chests, keys and a locked vault. Black sky, torch lighting. Enter from the gate, take the stairs between floors, and leave through the entrance to bank your run gold.
 - **Looting**: chests and keys are collected and removed from the world; chests are scaled to a readable size, and stone columns reach the ceiling and block movement.
-- **Combat**: intentionally not implemented on this branch. The bow is visible as a viewmodel only.
+- **Combat (first pass)**: chargeable physical arrows, RMB aim/zoom, guards with vision cones + hearing + alert propagation, patrol/investigate/chase/search states, spear attacks, player health/damage/death, and crouched rear takedowns.
+- **Combat consequences**: guards hit for 25 damage (four hits at base health); dying loses run gold and keys and returns you to Sherwood.
 
-Next up: a separate combat branch with guard AI, bow shooting, player health/damage, stealth/backstab, and the king encounter.
+Next up: king and bodyguards, abilities in combat, light/shadow stealth, and audio.
 
 ## Base pass fixes
 
@@ -53,6 +54,9 @@ Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for th
 | Look | Mouse |
 | Sprint | `Shift` |
 | Crouch | `Ctrl` |
+| Charge / fire bow | Hold / release `LMB` |
+| Aim / zoom | `RMB` |
+| Takedown guard | `E` while crouched behind an unaware guard |
 | Interact / shop / enter castle | `E` |
 | Pause / recapture mouse | `Esc` (or click) |
 
@@ -60,10 +64,12 @@ Open the printed URL. Add `?debug=1` for the debug HUD, or `?view=assets` for th
 
 | URL / command | Purpose |
 | --- | --- |
-| `?debug=1` | Draw the debug HUD (seed, state, position, FPS) |
+| `?debug=1` | Draw the debug HUD (seed, state, position, FPS, combat) |
 | `?view=assets` | Development asset viewer (every kit + custom model on a grid) |
 | `?castle=1` | Boot straight into a castle run |
 | `?castle=1&at=vault` | Spawn inside the vault |
+| `?castle=1&at=guard` | Spawn near the first guard |
+| `?god` | Disable player damage (debug) |
 | `scripts/shot.sh <url> <out.png>` | Headless screenshot helper (Firefox + geckodriver) |
 | `scripts/eval.sh <url> <js>` | Evaluate JS in the running page (debugging) |
 

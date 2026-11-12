@@ -130,7 +130,7 @@ function tryGenerate(seed: number, width: number, height: number, _rng?: unknown
   }
   for (let i = 0; i < 6; i += 1) {
     const floor = rng.chance(0.5) ? 1 : 0;
-    const spot = pickRandomFloor(rng, floor === 0 ? floor0 : floor1, [entrance]);
+    const spot = pickRandomFloor(rng, floor === 0 ? floor0 : floor1, [entrance], 3);
     guards.push({ x: spot.x, z: spot.z, floor });
   }
 
@@ -298,14 +298,24 @@ function pickFarCell(rng: Rng, floor: FloorLayout, from: Point, minDistance: num
   return rng.pick(candidates);
 }
 
-function pickRandomFloor(rng: Rng, floor: FloorLayout, avoid: Point[]): Point {
+function pickRandomFloor(
+  rng: Rng,
+  floor: FloorLayout,
+  avoid: Point[],
+  avoidRadius = 1,
+): Point {
   for (let i = 0; i < 200; i += 1) {
     const x = rng.intBetween(1, floor.width - 2);
     const z = rng.intBetween(1, floor.height - 2);
     if (get(floor.cells, floor.width, x, z) !== FLOOR) {
       continue;
     }
-    if (avoid.some((point) => Math.abs(point.x - x) <= 1 && Math.abs(point.z - z) <= 1)) {
+    if (
+      avoid.some(
+        (point) =>
+          Math.abs(point.x - x) <= avoidRadius && Math.abs(point.z - z) <= avoidRadius,
+      )
+    ) {
       continue;
     }
     return { x, z };
@@ -327,6 +337,73 @@ function nearestFloor(floor: FloorLayout, target: Point): Point | null {
     }
   }
   return null;
+}
+
+/** BFS path between two walkable cells, inclusive. Returns [] if unreachable. */
+export function findPath(
+  floor: FloorLayout,
+  from: Point,
+  to: Point,
+  isBlocked?: (x: number, z: number) => boolean,
+): Point[] {
+  if (!isFloor(floor, from.x, from.z) || !isFloor(floor, to.x, to.z)) {
+    return [];
+  }
+  if (isBlocked?.(to.x, to.z)) {
+    return [];
+  }
+  const width = floor.width;
+  const start = from.z * width + from.x;
+  const goal = to.z * width + to.x;
+  if (start === goal) {
+    return [{ x: from.x, z: from.z }];
+  }
+
+  const previous = new Int32Array(width * floor.height).fill(-1);
+  const visited = new Uint8Array(width * floor.height);
+  const queue: number[] = [start];
+  visited[start] = 1;
+
+  while (queue.length > 0) {
+    const index = queue.shift() as number;
+    const x = index % width;
+    const z = Math.floor(index / width);
+    for (const dir of NEIGHBOURS) {
+      const nx = x + dir.x;
+      const nz = z + dir.z;
+      if (!isFloor(floor, nx, nz)) {
+        continue;
+      }
+      if (isBlocked?.(nx, nz)) {
+        continue;
+      }
+      const next = nz * width + nx;
+      if (visited[next]) {
+        continue;
+      }
+      visited[next] = 1;
+      previous[next] = index;
+      if (next === goal) {
+        queue.length = 0;
+        break;
+      }
+      queue.push(next);
+    }
+  }
+
+  if (!visited[goal]) {
+    return [];
+  }
+  const reversed: Point[] = [];
+  let current = goal;
+  while (current !== -1) {
+    reversed.push({ x: current % width, z: Math.floor(current / width) });
+    if (current === start) {
+      break;
+    }
+    current = previous[current] as number;
+  }
+  return reversed.reverse();
 }
 
 /** Breadth-first distance field from a start cell; -1 marks unreachable. */

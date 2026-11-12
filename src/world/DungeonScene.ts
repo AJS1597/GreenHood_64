@@ -13,7 +13,16 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
-import { FLOOR, generateDungeon, isFloor, worldBoundsFor, type Dungeon, type FloorLayout } from '../core/dungeon';
+import {
+  FLOOR,
+  generateDungeon,
+  isFloor,
+  worldBoundsFor,
+  type Dungeon,
+  type FloorLayout,
+} from '../core/dungeon';
+import { createRng } from '../core/rng';
+import { Guard } from '../gameplay/Guard';
 import type { AssetLibrary } from './AssetLibrary';
 import { createCastleSky, type Sky } from './Skybox';
 
@@ -57,6 +66,7 @@ interface FloorData {
 export class DungeonScene {
   readonly dungeon: Dungeon;
   readonly root: TransformNode;
+  readonly guards: Guard[] = [];
   interactables: DungeonInteractable[] = [];
   currentFloor = 0;
 
@@ -144,6 +154,7 @@ export class DungeonScene {
     await this.buildStairs();
     await this.buildEntrance();
     await this.buildLoot();
+    await this.buildGuards();
     this.setFloor(0);
   }
 
@@ -155,6 +166,10 @@ export class DungeonScene {
     for (const light of this.lightPool) {
       light.dispose();
     }
+    for (const guard of this.guards) {
+      guard.dispose();
+    }
+    this.guards.length = 0;
     this.lights.length = 0;
     this.lightPool.length = 0;
     this.root.dispose(false, true);
@@ -170,6 +185,14 @@ export class DungeonScene {
 
   get baseY(): number {
     return 0;
+  }
+
+  get floorHeight(): number {
+    return FLOOR_H;
+  }
+
+  get wallHeight(): number {
+    return WALL_H;
   }
 
   /**
@@ -619,6 +642,41 @@ export class DungeonScene {
         floor: 0,
         mesh,
       });
+    }
+  }
+
+  private async buildGuards(): Promise<void> {
+    for (let i = 0; i < this.dungeon.guards.length; i += 1) {
+      const spot = this.dungeon.guards[i];
+      if (!spot) {
+        continue;
+      }
+      const floor = spot.floor;
+      const layout = this.dungeon.floors[floor];
+      if (!layout) {
+        continue;
+      }
+      const stair = this.dungeon.stairs;
+      const guard = await Guard.create(
+        {
+          scene: this.scene,
+          library: this.library,
+          floor: layout,
+          floorIndex: floor,
+          colliders: this.floors[floor]!.colliders,
+          tile: TILE,
+          floorY: floor * FLOOR_H,
+          rng: createRng((this.dungeon.seed ^ ((i + 1) * 2654435761)) >>> 0),
+          index: i,
+          isBlocked: (x, z) =>
+            x === stair.x && (z === stair.z || z === stair.z - 1),
+        },
+        spot,
+        this.root,
+      );
+      if (guard) {
+        this.guards.push(guard);
+      }
     }
   }
 

@@ -16,8 +16,15 @@ import type { AssetLibrary } from '../world/AssetLibrary';
  */
 export class BowViewModel {
   private readonly root: TransformNode;
+  private readonly restPosition = new Vector3(0.3, -0.14, 0.62);
+  private readonly aimPosition = new Vector3(0.16, -0.05, 0.52);
+  private readonly restRotation = new Vector3(0.06, -0.38, -0.22);
+  private readonly aimRotation = new Vector3(0.02, -0.22, -0.08);
   private tier: number;
   private request = 0;
+  private aiming = false;
+  private draw = 0;
+  private recoil = 0;
 
   constructor(
     private readonly scene: Scene,
@@ -28,8 +35,8 @@ export class BowViewModel {
     this.tier = clampTier(tier);
     this.root = new TransformNode('bow-viewmodel', scene);
     this.root.parent = camera;
-    this.root.position.set(0.3, -0.14, 0.62);
-    this.root.rotation.set(0.06, -0.38, -0.22);
+    this.root.position.copyFrom(this.restPosition);
+    this.root.rotation.copyFrom(this.restRotation);
     this.root.scaling.setAll(0.4);
   }
 
@@ -44,6 +51,43 @@ export class BowViewModel {
     }
     this.tier = next;
     await this.showTier(next);
+  }
+
+  setAiming(aiming: boolean): void {
+    this.aiming = aiming;
+  }
+
+  setDraw(charge: number): void {
+    this.draw = Math.max(0, Math.min(1, charge));
+  }
+
+  /** Kick the viewmodel back when an arrow leaves the string. */
+  release(): void {
+    this.draw = 0;
+    this.recoil = 1;
+  }
+
+  update(dt: number): void {
+    this.recoil = Math.max(0, this.recoil - dt * 5);
+    const aim = this.aiming ? 1 : 0;
+    const draw = this.draw;
+
+    const targetPosition = Vector3.Lerp(this.restPosition, this.aimPosition, aim);
+    targetPosition.z -= draw * 0.13;
+    targetPosition.y += draw * 0.01;
+    targetPosition.z += this.recoil * 0.06;
+    targetPosition.y += this.recoil * 0.03;
+
+    const targetRotation = Vector3.Lerp(this.restRotation, this.aimRotation, aim);
+    targetRotation.z += draw * 0.06;
+    targetRotation.x -= this.recoil * 0.12;
+
+    const targetScale = 0.4 + aim * 0.04 - draw * 0.02;
+    const blend = Math.min(1, dt * 14);
+    this.root.position.copyFrom(Vector3.Lerp(this.root.position, targetPosition, blend));
+    this.root.rotation.copyFrom(Vector3.Lerp(this.root.rotation, targetRotation, blend));
+    const scale = this.root.scaling.x + (targetScale - this.root.scaling.x) * blend;
+    this.root.scaling.setAll(scale);
   }
 
   dispose(): void {
