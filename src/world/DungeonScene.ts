@@ -455,28 +455,52 @@ export class DungeonScene {
       step.receiveShadows = false;
     }
 
-    // Close off the space underneath the upper landing on the ground floor.
-    const underWall = await this.cloneMesh('dungeon', 'template-wall', this.floorRoots[0]!);
-    if (underWall) {
-      underWall.rotationQuaternion = null;
-      underWall.position.set(stairX, 0, this.stairTopZ);
-      // Rotate so the 2 m slab sits north of the opening instead of intruding
-      // into the stairwell; its south face becomes the riser at the top step.
-      underWall.rotation.set(0, Math.PI, 0);
-      underWall.scaling.y = WALL_SKIN;
-      this.applyTileMaterial(underWall, new Color3(0.55, 0.56, 0.64));
+    const addThinWall = async (
+      parent: TransformNode,
+      x: number,
+      y: number,
+      z: number,
+      rotY: number,
+    ): Promise<void> => {
+      const wall = await this.cloneMesh('dungeon', 'template-wall', parent);
+      if (!wall) {
+        return;
+      }
+      wall.rotationQuaternion = null;
+      wall.position.set(x, y, z);
+      wall.rotation.set(0, rotY, 0);
+      wall.scaling.set(1, WALL_SKIN, 0.125);
+      this.applyTileMaterial(wall, new Color3(0.55, 0.56, 0.64));
+    };
+
+    const floor0 = this.dungeon.floors[0];
+    const floor1 = this.dungeon.floors[1];
+    const stairCellX = this.dungeon.stairs.x;
+
+    // Close off the space underneath the upper landing on the ground floor,
+    // but only when that side is open. If it is solid the normal wall mesh is
+    // already there and a second wall would z-fight.
+    const northOpen = isFloor(floor0, stairCellX, this.dungeon.stairs.z - 2);
+    if (northOpen) {
+      await addThinWall(this.floorRoots[0]!, stairX, 0, this.stairTopZ, Math.PI);
     }
 
+    // The normal floor-0 wall at the stair head is full height and would stop a
+    // climber just short of the landing. Replace it with a low barrier that
+    // still blocks someone walking under the stairs from the north.
+    this.floors[0]!.colliders = this.floors[0]!.colliders.filter((box) => {
+      const cx = (box.minX + box.maxX) / 2;
+      const cz = (box.minZ + box.maxZ) / 2;
+      return !(Math.abs(cx - stairX) < 0.01 && Math.abs(cz - this.stairTopZ) < 0.01);
+    });
     this.floors[0]!.colliders.push({
       ...aabbFromCenter(stairX, this.stairTopZ, TILE / 2, 0.2),
       minY: 0,
-      // Stop ground-floor players walking under the stairs, but let a climber
-      // whose feet are near the top step pass over the barrier.
       maxY: FLOOR_H - 0.6,
     });
 
     // The upper floor opens into the stairwell; the south lip is closed and
-    // both flanks are solid all the way up so the shaft reads as a real well.
+    // both flanks are kept solid up to the storey ceiling.
     const holeCentreZ = (this.stairTopZ + this.stairHoleSouthZ) / 2;
     const holeHalfZ = (this.stairHoleSouthZ - this.stairTopZ) / 2;
     this.floors[1]!.colliders.push({
@@ -492,31 +516,20 @@ export class DungeonScene {
       });
     }
 
-    // Close the upper-floor sides and the south lip with walls. Without them
-    // the top landing looks straight across the castle into the hallway.
-    const southWall = await this.cloneMesh('dungeon', 'template-wall', this.floorRoots[1]!);
-    if (southWall) {
-      southWall.rotationQuaternion = null;
-      southWall.position.set(stairX, FLOOR_H, this.stairHoleSouthZ);
-      southWall.rotation.set(0, Math.PI, 0);
-      southWall.scaling.y = WALL_SKIN;
-      this.applyTileMaterial(southWall, new Color3(0.55, 0.56, 0.64));
-    }
+    // Close the upper-floor sides and the south lip with walls. Only add a
+    // wall where the neighbouring cell is open; solid neighbours already have
+    // a normal wall. Thin slabs keep hallways outside the shaft usable.
+    await addThinWall(this.floorRoots[1]!, stairX, FLOOR_H, this.stairHoleSouthZ, Math.PI);
     for (const side of [-1, 1]) {
-      for (let i = 0; i < 2; i += 1) {
-        const wall = await this.cloneMesh('dungeon', 'template-wall', this.floorRoots[1]!);
-        if (!wall) {
-          continue;
+      for (let zCell = this.dungeon.stairs.z - 1; zCell <= this.dungeon.stairs.z; zCell += 1) {
+        const z = zCell * TILE;
+        const wallX = stairX + side * (TILE / 2 + 0.25);
+        if (isFloor(floor0, stairCellX + side, zCell)) {
+          await addThinWall(this.floorRoots[0]!, wallX, 0, z, side * (Math.PI / 2));
         }
-        wall.rotationQuaternion = null;
-        wall.position.set(
-          stairX + side * TILE,
-          FLOOR_H,
-          this.stairTopZ + 2 + i * 4,
-        );
-        wall.rotation.set(0, side * (Math.PI / 2), 0);
-        wall.scaling.y = WALL_SKIN;
-        this.applyTileMaterial(wall, new Color3(0.55, 0.56, 0.64));
+        if (isFloor(floor1, stairCellX + side, zCell)) {
+          await addThinWall(this.floorRoots[1]!, wallX, FLOOR_H, z, side * (Math.PI / 2));
+        }
       }
     }
   }
