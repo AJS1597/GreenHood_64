@@ -334,6 +334,7 @@ export class App {
           return;
         case 'chest':
           this.castle.take(interactable);
+          this.player.colliders = this.castle.colliders;
           this.runGold += 35;
           this.refreshWallet();
           this.hud.showToast('+35 gold');
@@ -343,6 +344,7 @@ export class App {
             this.runKeys -= 1;
             this.hud.setKeys(this.runKeys);
             this.castle.take(interactable);
+            this.player.colliders = this.castle.colliders;
             this.runGold += 50;
             this.refreshWallet();
             this.hud.showToast('Locked chest opened (+50 gold)');

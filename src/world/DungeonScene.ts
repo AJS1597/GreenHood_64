@@ -1,7 +1,6 @@
 import {
   AbstractMesh,
   Color3,
-  DynamicTexture,
   HemisphericLight,
   Light,
   Mesh,
@@ -590,46 +589,6 @@ export class DungeonScene {
       }
     }
 
-    this.addDirectionArrow(this.floorRoots[0]!, stairX, 2.4, this.stairBottomZ + 0.4, '↑');
-    this.addDirectionArrow(
-      this.floorRoots[1]!,
-      stairX,
-      FLOOR_H + 2.4,
-      this.stairTopZ - 1.2,
-      '↓',
-    );
-  }
-
-  private addDirectionArrow(
-    parent: TransformNode,
-    x: number,
-    y: number,
-    z: number,
-    symbol: string,
-  ): void {
-    const plane = MeshBuilder.CreatePlane(`stair-arrow-${symbol}`, { size: 0.8 }, this.scene);
-    plane.parent = parent;
-    plane.position.set(x, y, z);
-    plane.billboardMode = Mesh.BILLBOARDMODE_ALL;
-    plane.isPickable = false;
-    const texture = new DynamicTexture(
-      `stair-arrow-tex-${symbol}`,
-      { width: 128, height: 128 },
-      this.scene,
-      false,
-    );
-    texture.hasAlpha = true;
-    const context = texture.getContext() as CanvasRenderingContext2D;
-    context.clearRect(0, 0, 128, 128);
-    texture.drawText(symbol, null, 100, 'bold 104px Segoe UI', '#e6b84c', 'transparent', true);
-    const material = new StandardMaterial(`stair-arrow-mat-${symbol}`, this.scene);
-    material.diffuseTexture = texture;
-    material.opacityTexture = texture;
-    material.emissiveColor = Color3.White();
-    material.disableLighting = true;
-    material.backFaceCulling = false;
-    material.fogEnabled = false;
-    plane.material = material;
   }
 
   private async buildEntrance(): Promise<void> {
@@ -664,7 +623,7 @@ export class DungeonScene {
       const z = spot.z * TILE;
       const mesh = await this.cloneMesh('mini', 'chest', this.floorRoots[spot.floor]!);
       if (mesh) {
-        mesh.position = new Vector3(x, 0, z);
+        mesh.position = new Vector3(x, spot.floor * FLOOR_H, z);
         // The kit chest is only 0.5 m wide; scale it up to a readable hoard.
         mesh.scaling.setAll(3.2);
       }
