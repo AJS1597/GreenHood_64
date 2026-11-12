@@ -291,14 +291,14 @@ export class CombatSystem {
       }
       if (event.button === 2) {
         this.aiming = true;
-        event.preventDefault();
         return;
       }
       if (event.button !== 0 || this.cooldown > 0 || this.charging) {
         return;
       }
       // LMB charges and fires on its own; RMB is only the optional zoom.
-      event.preventDefault();
+      // Do not preventDefault here: it can suppress the mousemove stream that
+      // drives camera look while the button is held.
       this.charging = true;
       this.chargeTime = 0;
       this.charge = 0;
