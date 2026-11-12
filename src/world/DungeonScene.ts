@@ -468,7 +468,9 @@ export class DungeonScene {
         const column = await this.cloneMesh('mini', 'column', parent);
         if (column) {
           column.position = new Vector3(corner.x, baseY, corner.z);
-          column.scaling.setAll(columnScale);
+          // Keep the top face just below the next floor's floor plane; at full
+          // height it is coplanar with the upper-floor tiles and z-fights.
+          column.scaling.set(columnScale, columnScale * WALL_SKIN, columnScale);
           this.floors[floorIndex]!.colliders.push({
             ...aabbFromCenter(corner.x, corner.z, columnHalf, columnHalf),
             minY: baseY,
