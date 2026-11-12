@@ -7,6 +7,14 @@ export class Hud {
   private readonly gold: HTMLElement;
   private readonly crowns: HTMLElement;
   private readonly floor: HTMLElement;
+  private readonly health: HTMLElement;
+  private readonly healthFill: HTMLElement;
+  private readonly healthValue: HTMLElement;
+  private readonly healthMax: HTMLElement;
+  private readonly alert: HTMLElement;
+  private readonly chargeRing: HTMLElement;
+  private readonly hitMarker: HTMLElement;
+  private readonly damageFlash: HTMLElement;
   private toastTimer = 0;
 
   constructor(document: Document) {
@@ -17,6 +25,14 @@ export class Hud {
     this.gold = require(document, 'hud-gold');
     this.crowns = require(document, 'hud-crowns');
     this.floor = require(document, 'hud-floor');
+    this.health = require(document, 'hud-health');
+    this.healthFill = require(document, 'hud-health-fill');
+    this.healthValue = require(document, 'hud-health-value');
+    this.healthMax = require(document, 'hud-health-max');
+    this.alert = require(document, 'hud-alert');
+    this.chargeRing = require(document, 'charge-ring');
+    this.hitMarker = require(document, 'hit-marker');
+    this.damageFlash = require(document, 'damage-flash');
   }
 
   show(): void {
@@ -48,6 +64,41 @@ export class Hud {
     }
     this.floor.textContent = text;
     this.floor.hidden = false;
+  }
+
+  setHealth(current: number | null, max = 100): void {
+    if (current === null) {
+      this.health.hidden = true;
+      return;
+    }
+    const clamped = Math.max(0, Math.min(current, max));
+    const percent = max > 0 ? (clamped / max) * 100 : 0;
+    this.health.hidden = false;
+    this.healthFill.style.width = `${percent}%`;
+    this.healthValue.textContent = String(Math.ceil(clamped));
+    this.healthMax.textContent = String(Math.ceil(max));
+  }
+
+  setAlert(active: boolean): void {
+    this.alert.hidden = !active;
+  }
+
+  setCharge(value: number): void {
+    const clamped = Math.max(0, Math.min(1, value));
+    this.chargeRing.style.setProperty('--charge', clamped.toFixed(3));
+    this.chargeRing.classList.toggle('is-active', clamped > 0.001);
+  }
+
+  showHitMarker(): void {
+    this.hitMarker.classList.remove('is-active');
+    void this.hitMarker.offsetWidth;
+    this.hitMarker.classList.add('is-active');
+  }
+
+  flashDamage(): void {
+    this.damageFlash.classList.remove('is-active');
+    void this.damageFlash.offsetWidth;
+    this.damageFlash.classList.add('is-active');
   }
 
   showToast(text: string, durationMs = 2600): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bfs, generateDungeon, isFloor, isPlayable, reachable, worldBoundsFor } from '../src/core/dungeon';
+import { bfs, findPath, generateDungeon, isFloor, isPlayable, reachable, worldBoundsFor } from '../src/core/dungeon';
 
 function hashCells(cells: Uint8Array): number {
   let hash = 2166136261 >>> 0;
@@ -79,6 +79,19 @@ describe('dungeon generation', () => {
       hashes.add(hashCells(generateDungeon(seed).floors[0].cells));
     }
     expect(hashes.size).toBeGreaterThan(8);
+  });
+
+  it('finds a walkable path between two cells', () => {
+    const dungeon = generateDungeon(21);
+    const floor = dungeon.floors[0]!;
+    const path = findPath(floor, dungeon.entrance, dungeon.vault);
+    expect(path.length).toBeGreaterThan(1);
+    expect(path[0]).toEqual(dungeon.entrance);
+    for (let i = 1; i < path.length; i += 1) {
+      const previous = path[i - 1]!;
+      const current = path[i]!;
+      expect(Math.abs(previous.x - current.x) + Math.abs(previous.z - current.z)).toBe(1);
+    }
   });
 
   it('bfs marks solid cells unreachable', () => {

@@ -6,6 +6,7 @@
 # Inputs (never modified):
 #   Assets/Models/Mujtaba-io/soldier-20.blend     -> public/assets/custom/guard.glb
 #   Assets/Models/CptDrunkBear/Weapons/items.blend -> public/assets/custom/bow-tier-*.glb
+#   Assets/Models/Umplix/arrow.blend               -> public/assets/custom/arrow.glb
 #
 # Also renders small Workbench previews into public/assets/custom/preview/ so the
 # exports can be eyeballed without opening Blender.
@@ -24,6 +25,7 @@ OUT_DIR = os.path.join(REPO_ROOT, "public", "assets", "custom")
 PREVIEW_DIR = os.path.join(OUT_DIR, "preview")
 SOLDIER_BLEND = os.path.join(REPO_ROOT, "Assets", "Models", "Mujtaba-io", "soldier-20.blend")
 ITEMS_BLEND = os.path.join(REPO_ROOT, "Assets", "Models", "CptDrunkBear", "Weapons", "items.blend")
+ARROW_BLEND = os.path.join(REPO_ROOT, "Assets", "Models", "Umplix", "arrow.blend")
 
 # object name in items.blend -> exported tier file.
 # The source models are bow staves/limbs without strings; the game adds a
@@ -57,9 +59,17 @@ BOW_COLORS = {
 }
 BOW_FALLBACK = (0.48, 0.33, 0.19, 1.0)
 
+ARROW_COLORS = {
+    "Wood": (0.46, 0.30, 0.16, 1.0),
+    "Metal": (0.66, 0.67, 0.72, 1.0),
+    "Feather": (0.84, 0.80, 0.68, 1.0),
+}
+ARROW_FALLBACK = (0.48, 0.33, 0.19, 1.0)
+
 # Exported sizes in metres so every scene starts from a sane scale.
 TARGET_GUARD_HEIGHT = 1.7
 TARGET_BOW_LENGTH = 1.25
+TARGET_ARROW_LENGTH = 0.9
 
 
 def log(message):
@@ -263,9 +273,43 @@ def export_bow(tier_name, object_name):
     export_glb(os.path.join(OUT_DIR, "{}.glb".format(tier_name)), animations=False)
 
 
+def export_arrow():
+    open_blend(ARROW_BLEND)
+    target = bpy.data.objects.get("Arrow")
+    if target is None:
+        raise RuntimeError("arrow blend is missing its Arrow mesh")
+
+    delete_except([target.name])
+    apply_palette(ARROW_COLORS, ARROW_FALLBACK, default_roughness=0.65)
+
+    # Bake source transforms, then point the tip along +Z in glTF space.
+    select_only([target])
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    target.rotation_mode = "XYZ"
+    target.rotation_euler = (0.0, 0.0, math.pi)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    # Normalise the length and centre the mesh on its origin.
+    minimum, maximum = bounds_of([target])
+    size = maximum - minimum
+    length = max(size.x, size.y, size.z, 0.001)
+    scale = TARGET_ARROW_LENGTH / length
+    target.scale = (scale, scale, scale)
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+    minimum, maximum = bounds_of([target])
+    center = (minimum + maximum) * 0.5
+    target.location = -center
+    bpy.ops.object.transform_apply(location=True, rotation=True, scale=True)
+
+    render_preview("arrow")
+    select_only([target])
+    export_glb(os.path.join(OUT_DIR, "arrow.glb"), animations=False)
+
+
 def main():
     os.makedirs(OUT_DIR, exist_ok=True)
     export_guard()
+    export_arrow()
     for tier_name, object_name in BOW_TIERS:
         export_bow(tier_name, object_name)
     log("done -> {}".format(os.path.relpath(OUT_DIR, REPO_ROOT)))

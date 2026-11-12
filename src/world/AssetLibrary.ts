@@ -1,6 +1,6 @@
 import type { AssetContainer, Scene } from '@babylonjs/core';
 import { LoadAssetContainerAsync } from '@babylonjs/core';
-import '@babylonjs/loaders/glTF';
+import { GLTFLoaderAnimationStartMode } from '@babylonjs/loaders/glTF';
 
 /** Runtime folders produced by `pnpm assets:prepare`. */
 export const ASSET_ROOTS = {
@@ -61,7 +61,19 @@ export class AssetLibrary {
 
   private async loadInternal(key: string, url: string): Promise<AssetContainer | null> {
     try {
-      const container = await LoadAssetContainerAsync(url, this.scene);
+      const container = await LoadAssetContainerAsync(url, this.scene, {
+        pluginOptions: {
+          gltf: {
+            animationStartMode: GLTFLoaderAnimationStartMode.NONE,
+          },
+        },
+      });
+      // Never auto-play source animations. These containers are cached and
+      // reused by every scene; a door/chest left mid-animation would leak that
+      // state into the next area.
+      for (const group of container.animationGroups) {
+        group.stop();
+      }
       this.containers.set(key, container);
       return container;
     } catch (error) {

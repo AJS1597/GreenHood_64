@@ -9,7 +9,9 @@ import { Hud } from '../ui/Hud';
 import { ShopPanel } from '../ui/ShopPanel';
 import { PlayerController } from '../gameplay/PlayerController';
 import { BowViewModel } from '../gameplay/BowViewModel';
+import { CombatSystem } from '../gameplay/CombatSystem';
 import { DEBUG } from '../core/config';
+import { playerMaxHealth } from '../core/combat';
 import { formatSeed, randomSeed } from '../core/rng';
 import type { ShopTab } from '../core/shop';
 import { SaveStore } from './SaveStore';
@@ -41,12 +43,14 @@ export class App {
   private readonly shop: ShopPanel;
   private readonly player: PlayerController;
   private readonly bow: BowViewModel;
+  private readonly combat: CombatSystem;
   private readonly resumeHint: HTMLElement;
   private readonly fade: HTMLElement;
   private readonly debugState: HTMLElement | null;
   private readonly debugPos: HTMLElement | null;
   private readonly debugSeed: HTMLElement | null;
   private readonly debugFps: HTMLElement | null;
+  private readonly debugCombat: HTMLElement | null;
 
   readonly save: SaveStore;
 
@@ -60,6 +64,8 @@ export class App {
   private runKeys = 0;
   private runSeed = 0;
   private debugAt: string | null = null;
+  private combatTest = false;
+  private testRespawnTimer = 0;
 
   constructor(canvas: HTMLCanvasElement, document: Document) {
     this.loading = new LoadingScreen(document);
@@ -75,6 +81,18 @@ export class App {
       this.player.camera,
       this.save.current.bowTier,
     );
+    this.combat = new CombatSystem(
+      this.host.scene,
+      this.library,
+      canvas,
+      this.player,
+      this.bow,
+      this.hud,
+      this.save,
+    );
+    this.combat.onDeath = () => {
+      void this.dieInCastle();
+    };
 
     this.resumeHint = requiredElement(document, 'click-to-play');
     this.fade = requiredElement(document, 'fade');
@@ -82,12 +100,16 @@ export class App {
     this.debugPos = document.getElementById('debug-pos');
     this.debugSeed = document.getElementById('debug-seed');
     this.debugFps = document.getElementById('debug-fps');
+    this.debugCombat = document.getElementById('debug-combat');
   }
 
   async start(): Promise<void> {
     const params = new URLSearchParams(window.location.search);
     DEBUG.enabled = params.has('debug');
+    DEBUG.godMode = params.has('god');
     this.debugAt = params.get('at');
+    const path = window.location.pathname.replace(/\/+$/, '');
+    this.combatTest = path === '/combat' || params.get('view') === 'combat';
 
     if (params.get('view') === 'assets') {
       await this.startShowcase();
@@ -98,6 +120,7 @@ export class App {
     this.loading.setProgress(0.35);
     await this.loadHub();
     await this.bow.build();
+    await this.combat.loadAssets();
     this.loading.setProgress(0.9);
 
     this.wireUi();
@@ -113,7 +136,7 @@ export class App {
     }
 
     // Debug entry point straight into a castle run.
-    if (params.has('castle')) {
+    if (params.has('castle') || this.combatTest) {
       await this.enterCastle();
     } else {
       this.pause();
@@ -122,10 +145,12 @@ export class App {
 
   private wireUi(): void {
     this.player.onLockChange = (locked) => {
+      this.combat.setInputEnabled(locked);
       if (locked) {
         this.resumeHint.hidden = true;
         this.state = 'playing';
       } else if (this.state === 'playing') {
+        this.combat.cancel();
         this.pause();
       }
     };
@@ -141,13 +166,18 @@ export class App {
       const save = this.save.current;
       this.refreshWallet();
       this.player.camera.fov = save.settings.fov;
+      this.combat.setBaseFov(save.settings.fov);
       void this.bow.setTier(save.bowTier);
     };
 
     // Clicking anywhere while paused recaptures the mouse; Escape also resumes
     // (rather than forcing a click on a full-screen overlay).
-    document.addEventListener('click', () => {
-      if (this.state === 'paused') {
+    document.addEventListener('click', (event) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest('a')) {
+        return;
+      }
+      if (this.state === 'paused' || (this.state === 'playing' && !this.player.isLocked)) {
         this.resume();
       }
     });
@@ -163,6 +193,12 @@ export class App {
   private update(deltaMs: number): void {
     this.player.update(deltaMs);
     this.updateStairs();
+    if (this.location === 'castle' && this.state === 'playing') {
+      this.combat.update(deltaMs);
+      if (this.combatTest) {
+        this.updateCombatTest(deltaMs);
+      }
+    }
     this.updateLighting();
     this.updatePrompt();
 
@@ -176,6 +212,10 @@ export class App {
         if (this.debugPos) this.debugPos.textContent = `${pos.x.toFixed(1)}, ${pos.z.toFixed(1)}`;
         if (this.debugSeed)
           this.debugSeed.textContent = this.location === 'hub' ? 'hub' : formatSeed(this.runSeed);
+        if (this.debugCombat) {
+          this.debugCombat.textContent =
+            this.location === 'castle' ? this.combat.debugLabel() : '—';
+        }
       }
     }
   }
@@ -189,6 +229,36 @@ export class App {
     }
   }
 
+  /** Keep a fresh target in front of the player while using /combat. */
+  private updateCombatTest(deltaMs: number): void {
+    if (!this.castle) {
+      return;
+    }
+    if (this.castle.guards.some((guard) => guard.isAlive)) {
+      this.testRespawnTimer = 0;
+      return;
+    }
+    if (this.testRespawnTimer <= 0) {
+      this.testRespawnTimer = 2.5;
+    }
+    this.testRespawnTimer -= deltaMs / 1000;
+    if (this.testRespawnTimer > 0) {
+      return;
+    }
+    this.testRespawnTimer = 0;
+    const entrance = this.castle.dungeon.entrance;
+    void this.castle
+      .spawnGuardAt(0, entrance.x, Math.max(1, entrance.z - 1))
+      .then((guard) => {
+        if (guard) {
+          guard.yaw = Math.PI;
+          guard.root.rotation.y = 0;
+          guard.hold(999);
+          this.combat.attachGuard(guard);
+        }
+      });
+  }
+
   private updateLighting(): void {
     if (this.location === 'castle' && this.castle) {
       this.castle.updateLighting(this.player.camera.position);
@@ -196,9 +266,16 @@ export class App {
   }
 
   private updatePrompt(): void {
-    if (this.state !== 'playing' || !this.player.isLocked) {
+    if (this.state !== 'playing') {
       this.hud.setPrompt(null);
       return;
+    }
+    if (this.location === 'castle') {
+      const takedown = this.combat.takedownHint();
+      if (takedown) {
+        this.hud.setPrompt(takedown);
+        return;
+      }
     }
     const pos = this.player.position;
     const interactable =
@@ -226,6 +303,9 @@ export class App {
     }
 
     if (this.location === 'castle' && this.castle) {
+      if (this.combat.tryTakedown()) {
+        return;
+      }
       const interactable = this.castle.nearest(pos.x, pos.z);
       if (!interactable) {
         return;
@@ -265,6 +345,21 @@ export class App {
       this.runKeys = 0;
       const castle = new DungeonScene(this.host.scene, this.library, this.runSeed);
       await castle.build();
+      if (this.combatTest) {
+        castle.clearGuards();
+        const entrance = castle.dungeon.entrance;
+        const testGuard = await castle.spawnGuardAt(
+          0,
+          entrance.x,
+          Math.max(1, entrance.z - 1),
+        );
+        if (testGuard) {
+          testGuard.yaw = Math.PI;
+          testGuard.root.rotation.y = 0;
+          testGuard.hold(999);
+        }
+        this.testRespawnTimer = 0;
+      }
       this.castle = castle;
       this.location = 'castle';
       this.player.baseY = castle.baseY;
@@ -278,14 +373,37 @@ export class App {
       this.player.camera.maxZ = 260;
       this.host.scene.clearColor = CASTLE_CLEAR;
       this.hud.setFloor(`Castle ${formatSeed(this.runSeed)} · Floor 1`);
+      if (this.debugAt === 'guard' && castle.guards[0]) {
+        const guard = castle.guards[0];
+        this.player.spawn(guard.x, guard.z + 4, Math.PI);
+      }
+      this.combat.enterCastle(
+        castle,
+        playerMaxHealth(this.save.current.training.maxHealth),
+      );
+      this.save.update((save) => {
+        save.stats.runs += 1;
+      });
     });
-    this.state = 'playing';
-    this.hud.showToast('Find the king or raid the vault — then return to the gate.');
+    if (this.player.isLocked) {
+      this.state = 'playing';
+    } else {
+      // Debug/test entries (including /combat) do not inherit pointer lock.
+      // Show the resume prompt so the first click captures the mouse.
+      this.pause();
+    }
+    this.combat.setInputEnabled(this.state === 'playing');
+    this.hud.showToast(
+      this.combatTest
+        ? 'Combat test — hold LMB to draw, release to fire'
+        : 'Find the king or raid the vault — then return to the gate.',
+    );
   }
 
   private async leaveCastle(): Promise<void> {
     this.state = 'boot';
     this.hud.setPrompt(null);
+    this.combat.leaveCastle();
     const banked = this.runGold;
     await this.fadeThrough(async () => {
       this.castle?.dispose();
@@ -300,10 +418,33 @@ export class App {
     }
     this.refreshWallet();
     this.state = 'playing';
+    this.combat.setInputEnabled(false);
     this.hud.showToast(banked > 0 ? `Banked ${banked} gold` : 'Back in Sherwood');
   }
 
+  private async dieInCastle(): Promise<void> {
+    if (this.state !== 'playing' && this.state !== 'paused') {
+      return;
+    }
+    this.state = 'boot';
+    this.hud.setPrompt(null);
+    this.combat.leaveCastle();
+    const lost = this.runGold;
+    await this.fadeThrough(async () => {
+      this.castle?.dispose();
+      this.castle = null;
+      await this.loadHub();
+    });
+    this.runGold = 0;
+    this.runKeys = 0;
+    this.refreshWallet();
+    this.state = 'playing';
+    this.combat.setInputEnabled(false);
+    this.hud.showToast(lost > 0 ? `You died — lost ${lost} gold` : 'You died');
+  }
+
   private async loadHub(): Promise<void> {
+    this.combat.leaveCastle();
     this.castle?.dispose();
     this.castle = null;
     const hub = new HubScene(this.host.scene, this.library);
@@ -337,6 +478,7 @@ export class App {
 
   private openShop(tab: ShopTab): void {
     this.state = 'shop';
+    this.combat.setInputEnabled(false);
     this.hud.setPrompt(null);
     this.player.releaseLock();
     this.shop.show(tab);
@@ -349,6 +491,7 @@ export class App {
 
   private pause(): void {
     this.state = 'paused';
+    this.combat.setInputEnabled(false);
     this.resumeHint.hidden = false;
     this.hud.setPrompt(null);
   }

@@ -13,7 +13,16 @@ import {
   Vector3,
 } from '@babylonjs/core';
 import { aabbFromCenter, type Aabb2, type Bounds2 } from '../core/collision';
-import { FLOOR, generateDungeon, isFloor, worldBoundsFor, type Dungeon, type FloorLayout } from '../core/dungeon';
+import {
+  FLOOR,
+  generateDungeon,
+  isFloor,
+  worldBoundsFor,
+  type Dungeon,
+  type FloorLayout,
+} from '../core/dungeon';
+import { createRng } from '../core/rng';
+import { Guard } from '../gameplay/Guard';
 import type { AssetLibrary } from './AssetLibrary';
 import { createCastleSky, type Sky } from './Skybox';
 
@@ -57,6 +66,7 @@ interface FloorData {
 export class DungeonScene {
   readonly dungeon: Dungeon;
   readonly root: TransformNode;
+  readonly guards: Guard[] = [];
   interactables: DungeonInteractable[] = [];
   currentFloor = 0;
 
@@ -144,6 +154,7 @@ export class DungeonScene {
     await this.buildStairs();
     await this.buildEntrance();
     await this.buildLoot();
+    await this.buildGuards();
     this.setFloor(0);
   }
 
@@ -155,9 +166,14 @@ export class DungeonScene {
     for (const light of this.lightPool) {
       light.dispose();
     }
+    for (const guard of this.guards) {
+      guard.dispose();
+    }
+    this.guards.length = 0;
     this.lights.length = 0;
     this.lightPool.length = 0;
-    this.root.dispose(false, true);
+    // Shared kit materials/textures live in the AssetLibrary cache.
+    this.root.dispose(false, false);
   }
 
   get colliders(): Aabb2[] {
@@ -170,6 +186,14 @@ export class DungeonScene {
 
   get baseY(): number {
     return 0;
+  }
+
+  get floorHeight(): number {
+    return FLOOR_H;
+  }
+
+  get wallHeight(): number {
+    return WALL_H;
   }
 
   /**
@@ -233,7 +257,7 @@ export class DungeonScene {
     if (index >= 0) {
       this.interactables.splice(index, 1);
     }
-    item.mesh?.dispose(false, true);
+    item.mesh?.dispose(false, false);
     item.mesh = null;
   }
 
@@ -620,6 +644,58 @@ export class DungeonScene {
         mesh,
       });
     }
+  }
+
+  private async buildGuards(): Promise<void> {
+    for (const spot of this.dungeon.guards) {
+      if (!spot) {
+        continue;
+      }
+      await this.spawnGuardAt(spot.floor, spot.x, spot.z);
+    }
+  }
+
+  /** Spawn an extra guard at a grid cell. Used by the combat test route. */
+  async spawnGuardAt(floorIndex: number, cellX: number, cellZ: number): Promise<Guard | null> {
+    const layout = this.dungeon.floors[floorIndex];
+    if (!layout) {
+      return null;
+    }
+    const stair = this.dungeon.stairs;
+    const index = this.guards.length;
+    const guard = await Guard.create(
+      {
+        scene: this.scene,
+        library: this.library,
+        floor: layout,
+        floorIndex,
+        colliders: this.floors[floorIndex]!.colliders,
+        tile: TILE,
+        floorY: floorIndex * FLOOR_H,
+        rng: createRng(
+          (this.dungeon.seed ^
+            (cellX * 73856093) ^
+            (cellZ * 19349663) ^
+            (floorIndex * 83492791)) >>>
+            0,
+        ),
+        index,
+        isBlocked: (x, z) => x === stair.x && (z === stair.z || z === stair.z - 1),
+      },
+      { x: cellX, z: cellZ, floor: floorIndex },
+      this.root,
+    );
+    if (guard) {
+      this.guards.push(guard);
+    }
+    return guard;
+  }
+
+  clearGuards(): void {
+    for (const guard of this.guards) {
+      guard.dispose();
+    }
+    this.guards.length = 0;
   }
 
   private async cloneMesh(kit: 'dungeon' | 'mini', name: string, parent: TransformNode): Promise<Mesh | null> {

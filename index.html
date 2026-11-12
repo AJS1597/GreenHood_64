@@ -21,20 +21,29 @@
 
     <div id="hud" hidden>
       <div id="crosshair" class="crosshair"></div>
+      <div id="charge-ring" class="charge-ring"></div>
+      <div id="hit-marker" class="hit-marker"></div>
+      <div id="damage-flash" class="damage-flash"></div>
+      <div id="hud-alert" class="hud-alert" hidden>ALERT</div>
       <div class="hud-wallet">
         <span class="pill is-gold"><span id="hud-gold">0</span> gold</span>
         <span class="pill is-crown"><span id="hud-crowns">0</span> crowns</span>
       </div>
+      <div id="hud-health" class="hud-health" hidden>
+        <div class="hud-health-bar"><div id="hud-health-fill" class="hud-health-fill"></div></div>
+        <div class="hud-health-text"><span id="hud-health-value">100</span> / <span id="hud-health-max">100</span></div>
+      </div>
       <div id="hud-floor" class="hud-floor" hidden></div>
       <div id="hud-prompt" class="hud-prompt" hidden><kbd>E</kbd> <span id="hud-prompt-text"></span></div>
       <div id="hud-toast" class="hud-toast" hidden></div>
-      <div class="hud-hint">WASD move &middot; Mouse look &middot; Shift sprint &middot; Ctrl crouch &middot; E interact</div>
+      <div class="hud-hint">WASD move &middot; Mouse look &middot; Shift sprint &middot; C crouch &middot; LMB fire &middot; RMB aim &middot; E interact</div>
     </div>
 
     <div id="click-to-play" class="resume-hint" hidden>
       <div class="resume-card">
         <p class="resume-title" id="click-title">Paused</p>
         <p class="resume-subtitle" id="click-subtitle">Click or press Esc to resume</p>
+        <a class="resume-link" href="/combat">Combat test</a>
       </div>
     </div>
 
@@ -57,6 +66,7 @@
       <div><span class="debug-key">Seed</span> <span id="debug-seed">--</span></div>
       <div><span class="debug-key">State</span> <span id="debug-state">--</span></div>
       <div><span class="debug-key">Pos</span> <span id="debug-pos">--</span></div>
+      <div><span class="debug-key">Combat</span> <span id="debug-combat">--</span></div>
     </div>
 
     <script type="module" src="/src/main.ts"></script>

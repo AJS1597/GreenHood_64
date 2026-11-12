@@ -107,7 +107,9 @@ export class HubScene {
       light.dispose();
     }
     this.lights.length = 0;
-    this.root.dispose(false, true);
+    // Materials and textures are owned by the cached asset containers; only
+    // dispose this scene's meshes or the next area load reuses dead textures.
+    this.root.dispose(false, false);
   }
 
   /** Nearest interactable within its radius, or null. */

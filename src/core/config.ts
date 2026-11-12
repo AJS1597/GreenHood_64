@@ -35,6 +35,7 @@ export const CONFIG = {
 /** Debug flags, overridable from the URL with `?debug=1`. */
 export const DEBUG = {
   enabled: false,
+  godMode: false,
 };
 
 /** Where runtime assets are served from. */
