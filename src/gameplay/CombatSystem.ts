@@ -316,18 +316,13 @@ export class CombatSystem {
         this.fire();
       }
     };
-    // Listen to both pointer and mouse events. Some browsers surface pointer
-    // lock clicks through one family but not the other; the charging guard
-    // makes the duplicate event a no-op.
+    // Mouse events only: adding pointerdown/pointerup listeners alongside
+    // pointer lock can interfere with the mousemove stream that drives look.
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('mouseup', onMouseUp);
-    window.addEventListener('pointerdown', onMouseDown);
-    window.addEventListener('pointerup', onMouseUp);
     this.disposers.push(
       () => window.removeEventListener('mousedown', onMouseDown),
       () => window.removeEventListener('mouseup', onMouseUp),
-      () => window.removeEventListener('pointerdown', onMouseDown),
-      () => window.removeEventListener('pointerup', onMouseUp),
     );
   }
 

@@ -38,7 +38,9 @@ export class ArrowSystem {
   private readonly shaftMaterial: StandardMaterial;
   private readonly arrows: ArrowProjectile[] = [];
   private readonly impacts: Impact[] = [];
+  private readonly stuck: TransformNode[] = [];
   private arrowContainer: AssetContainer | null = null;
+  private static readonly MAX_STUCK = 20;
 
   constructor(
     private readonly scene: Scene,
@@ -142,6 +144,7 @@ export class ArrowSystem {
       const steps = Math.max(1, Math.ceil((speed * dt) / 0.22));
       const stepDt = dt / steps;
       let hit = false;
+      let hitGuard: Guard | null = null;
 
       for (let step = 0; step < steps; step += 1) {
         arrow.velocity.y -= COMBAT.arrowGravity * stepDt;
@@ -182,6 +185,7 @@ export class ArrowSystem {
           ) {
             onGuardHit(guard, arrow.damage, arrow.position.clone());
             this.spawnImpact(arrow.position, new Color3(0.75, 0.16, 0.12));
+            hitGuard = guard;
             hit = true;
             break;
           }
@@ -195,7 +199,7 @@ export class ArrowSystem {
       }
 
       if (hit) {
-        this.removeArrow(i);
+        this.stickArrow(i, hitGuard);
       }
     }
 
@@ -219,6 +223,12 @@ export class ArrowSystem {
       arrow.visual.dispose(false, false);
     }
     this.arrows.length = 0;
+    for (const stuck of this.stuck) {
+      if (!stuck.isDisposed()) {
+        stuck.dispose(false, false);
+      }
+    }
+    this.stuck.length = 0;
     for (const impact of this.impacts) {
       impact.mesh.dispose(false, true);
     }
@@ -228,6 +238,27 @@ export class ArrowSystem {
   dispose(): void {
     this.clear();
     this.root.dispose();
+  }
+
+  private stickArrow(index: number, guard: Guard | null): void {
+    const arrow = this.arrows[index];
+    if (!arrow) {
+      return;
+    }
+    arrow.visual.position.copyFrom(arrow.position);
+    this.orient(arrow.visual, arrow.velocity);
+    if (guard) {
+      // Preserve the world transform while making the arrow follow the guard.
+      arrow.visual.setParent(guard.root);
+    }
+    this.arrows.splice(index, 1);
+    this.stuck.push(arrow.visual);
+    while (this.stuck.length > ArrowSystem.MAX_STUCK) {
+      const oldest = this.stuck.shift();
+      if (oldest && !oldest.isDisposed()) {
+        oldest.dispose(false, false);
+      }
+    }
   }
 
   private removeArrow(index: number): void {
