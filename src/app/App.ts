@@ -167,7 +167,7 @@ export class App {
       if (target?.closest('a')) {
         return;
       }
-      if (this.state === 'paused') {
+      if (this.state === 'paused' || (this.state === 'playing' && !this.player.isLocked)) {
         this.resume();
       }
     });
@@ -375,7 +375,13 @@ export class App {
         save.stats.runs += 1;
       });
     });
-    this.state = 'playing';
+    if (this.player.isLocked) {
+      this.state = 'playing';
+    } else {
+      // Debug/test entries (including /combat) do not inherit pointer lock.
+      // Show the resume prompt so the first click captures the mouse.
+      this.pause();
+    }
     this.hud.showToast(
       this.combatTest
         ? 'Combat test — hold LMB to draw, release to fire'
