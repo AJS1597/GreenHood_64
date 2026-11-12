@@ -16,8 +16,11 @@ import type { AssetLibrary } from '../world/AssetLibrary';
  */
 export class BowViewModel {
   private readonly root: TransformNode;
+  private readonly nockedRoot: TransformNode;
   private readonly restPosition = new Vector3(0.3, -0.14, 0.62);
   private readonly aimPosition = new Vector3(0.16, -0.05, 0.52);
+  private readonly nockedRest = new Vector3(0.22, -0.08, 0.5);
+  private readonly nockedAim = new Vector3(0.12, -0.02, 0.44);
   private readonly restRotation = new Vector3(0.06, -0.38, -0.22);
   private readonly aimRotation = new Vector3(0.02, -0.22, -0.08);
   private tier: number;
@@ -25,6 +28,8 @@ export class BowViewModel {
   private aiming = false;
   private draw = 0;
   private recoil = 0;
+  private charging = false;
+  private nockedReady = false;
 
   constructor(
     private readonly scene: Scene,
@@ -38,10 +43,15 @@ export class BowViewModel {
     this.root.position.copyFrom(this.restPosition);
     this.root.rotation.copyFrom(this.restRotation);
     this.root.scaling.setAll(0.4);
+
+    this.nockedRoot = new TransformNode('nocked-arrow', scene);
+    this.nockedRoot.parent = camera;
+    this.nockedRoot.setEnabled(false);
   }
 
   async build(): Promise<void> {
     await this.showTier(this.tier);
+    await this.loadNockedArrow();
   }
 
   async setTier(tier: number): Promise<void> {
@@ -61,10 +71,17 @@ export class BowViewModel {
     this.draw = Math.max(0, Math.min(1, charge));
   }
 
+  setCharging(charging: boolean): void {
+    this.charging = charging;
+    this.nockedRoot.setEnabled(charging && this.nockedReady);
+  }
+
   /** Kick the viewmodel back when an arrow leaves the string. */
   release(): void {
     this.draw = 0;
     this.recoil = 1;
+    this.charging = false;
+    this.nockedRoot.setEnabled(false);
   }
 
   update(dt: number): void {
@@ -91,10 +108,44 @@ export class BowViewModel {
     this.root.rotation.copyFrom(Vector3.Lerp(this.root.rotation, targetRotation, blend));
     const scale = this.root.scaling.x + (targetScale - this.root.scaling.x) * blend;
     this.root.scaling.setAll(scale);
+
+    if (this.charging && this.nockedReady) {
+      const nockedTarget = Vector3.Lerp(this.nockedRest, this.nockedAim, aim);
+      nockedTarget.z -= draw * 0.24;
+      this.nockedRoot.position.copyFrom(
+        Vector3.Lerp(this.nockedRoot.position, nockedTarget, Math.min(1, dt * 18)),
+      );
+    }
   }
 
   dispose(): void {
+    this.nockedRoot.dispose(false, false);
     this.root.dispose(false, true);
+  }
+
+  private async loadNockedArrow(): Promise<void> {
+    const container = await this.library.load('custom', 'arrow');
+    if (!container) {
+      return;
+    }
+    const instantiated = container.instantiateModelsToScene(
+      (sourceName) => `nocked-${sourceName}`,
+      false,
+    );
+    for (const group of instantiated.animationGroups) {
+      group.stop();
+    }
+    for (const node of instantiated.rootNodes) {
+      node.parent = this.nockedRoot;
+    }
+    for (const mesh of this.nockedRoot.getChildMeshes()) {
+      mesh.isPickable = false;
+      mesh.alwaysSelectAsActiveMesh = true;
+      mesh.receiveShadows = false;
+    }
+    this.nockedRoot.position.copyFrom(this.nockedRest);
+    this.nockedReady = true;
+    this.nockedRoot.setEnabled(this.charging);
   }
 
   private async showTier(tier: number): Promise<void> {

@@ -40,7 +40,7 @@ Next up: king and bodyguards, abilities in combat, light/shadow stealth, and aud
 ```bash
 pnpm install
 pnpm assets:prepare   # copy Kenney GLBs into public/assets (once, or after changing Assets/)
-pnpm assets:models    # optional: re-export guard.glb + bow-tier-*.glb with Blender
+pnpm assets:models    # optional: re-export guard.glb, arrow.glb + bow-tier-*.glb with Blender
 pnpm dev
 ```
 
@@ -109,5 +109,6 @@ The reference art lives in `Assets/Models/` and is never modified. `pnpm assets:
 - **Kenney** — Fantasy Town Kit, Mini Dungeon, Modular Dungeon Kit (CC0)
 - **CptDrunkBear** — `items.blend` bow meshes (public domain)
 - **Mujtaba-io** — `soldier-20.blend` guard (public domain)
+- **Umplix** — `arrow.blend` arrow mesh (public domain)
 
 See `CREDITS.md` for links.

@@ -52,4 +52,5 @@ export const SHOWCASE: readonly ShowcaseEntry[] = [
   { label: 'Bow T1', kit: 'custom', name: 'bow-tier-1' },
   { label: 'Bow T3', kit: 'custom', name: 'bow-tier-3' },
   { label: 'Bow T5', kit: 'custom', name: 'bow-tier-5' },
+  { label: 'Arrow', kit: 'custom', name: 'arrow' },
 ];

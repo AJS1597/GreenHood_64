@@ -10,6 +10,7 @@ import {
 } from '../core/combat';
 import { DEBUG } from '../core/config';
 import type { SaveStore } from '../app/SaveStore';
+import type { AssetLibrary } from '../world/AssetLibrary';
 import type { DungeonScene } from '../world/DungeonScene';
 import { ArrowSystem } from './Arrows';
 import type { BowViewModel } from './BowViewModel';
@@ -43,14 +44,19 @@ export class CombatSystem {
 
   constructor(
     scene: Scene,
+    library: AssetLibrary,
     private readonly player: PlayerController,
     private readonly bow: BowViewModel,
     private readonly hud: Hud,
     private readonly save: SaveStore,
   ) {
-    this.arrows = new ArrowSystem(scene);
+    this.arrows = new ArrowSystem(scene, library);
     this.baseFov = save.current.settings.fov;
     this.bindInput();
+  }
+
+  async loadAssets(): Promise<void> {
+    await this.arrows.load();
   }
 
   setBaseFov(fov: number): void {
@@ -73,6 +79,7 @@ export class CombatSystem {
     this.arrows.clear();
     this.bow.setAiming(false);
     this.bow.setDraw(0);
+    this.bow.setCharging(false);
     this.hud.setHealth(this.health, this.maxHealth);
     this.hud.setAlert(false);
     this.hud.setCharge(0);
@@ -103,6 +110,7 @@ export class CombatSystem {
     this.arrows.clear();
     this.bow.setAiming(false);
     this.bow.setDraw(0);
+    this.bow.setCharging(false);
     this.player.camera.fov = this.baseFov;
     this.hud.setHealth(null);
     this.hud.setAlert(false);
@@ -116,6 +124,7 @@ export class CombatSystem {
     this.chargeTime = 0;
     this.bow.setAiming(false);
     this.bow.setDraw(0);
+    this.bow.setCharging(false);
     this.player.camera.fov = this.baseFov;
     this.hud.setCharge(0);
   }
@@ -267,6 +276,7 @@ export class CombatSystem {
       this.charging = true;
       this.chargeTime = 0;
       this.charge = 0;
+      this.bow.setCharging(true);
     };
     const onMouseUp = (event: MouseEvent): void => {
       if (!this.active) {
@@ -317,6 +327,7 @@ export class CombatSystem {
     this.charging = false;
     this.charge = 0;
     this.chargeTime = 0;
+    this.bow.setCharging(false);
     this.bow.release();
     this.hud.setCharge(0);
   }

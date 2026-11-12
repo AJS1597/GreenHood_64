@@ -16,14 +16,13 @@ selectively copied into `public/assets/` for the web build.
 
 | Asset | Author | License | Source |
 | --- | --- | --- | --- |
-| `items.blend` (bow meshes) | CptDrunkBear | Public domain (per project owner) | provided in `Assets/Models/CptDrunkBear/Weapons` |
-| `soldier-20.blend` (guard) | Mujtaba-io | Public domain (per project owner) | provided in `Assets/Models/Mujtaba-io` |
+| `items.blend` (bow meshes) | CptDrunkBear | Public domain | provided in `Assets/Models/CptDrunkBear/Weapons` |
+| `soldier-20.blend` (guard) | Mujtaba-io | Public domain | provided in `Assets/Models/Mujtaba-io` |
+|`arrow.blend` (Arrow mesh) | Umplix | Public domain | provided in `Assets/Models/Umplix` |
 
 ## Notes
 
 - Kenney assets ship with their own `License.txt` files inside each kit folder.
-- The guard and bow `.blend` files have no bundled license text; the project
-  owner has confirmed they are public domain. Add source links here if they
-  become available.
+- The guard and bow `.blend` files have no bundled license text
 - All UI icons, fonts, sound effects and placeholder models are generated
   procedurally by the game at runtime.

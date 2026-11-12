@@ -81,7 +81,14 @@ export class App {
       this.player.camera,
       this.save.current.bowTier,
     );
-    this.combat = new CombatSystem(this.host.scene, this.player, this.bow, this.hud, this.save);
+    this.combat = new CombatSystem(
+      this.host.scene,
+      this.library,
+      this.player,
+      this.bow,
+      this.hud,
+      this.save,
+    );
     this.combat.onDeath = () => {
       void this.dieInCastle();
     };
@@ -112,6 +119,7 @@ export class App {
     this.loading.setProgress(0.35);
     await this.loadHub();
     await this.bow.build();
+    await this.combat.loadAssets();
     this.loading.setProgress(0.9);
 
     this.wireUi();

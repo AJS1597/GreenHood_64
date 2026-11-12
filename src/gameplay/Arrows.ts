@@ -2,17 +2,20 @@ import {
   Color3,
   Mesh,
   MeshBuilder,
+  PBRMaterial,
   StandardMaterial,
   TransformNode,
   Vector3,
+  type AssetContainer,
   type Scene,
 } from '@babylonjs/core';
 import { COMBAT, pointHitsGuard, pointHitsWall } from '../core/combat';
+import type { AssetLibrary } from '../world/AssetLibrary';
 import type { DungeonScene } from '../world/DungeonScene';
 import type { Guard } from './Guard';
 
 interface ArrowProjectile {
-  mesh: Mesh;
+  visual: TransformNode;
   position: Vector3;
   velocity: Vector3;
   damage: number;
@@ -35,8 +38,12 @@ export class ArrowSystem {
   private readonly shaftMaterial: StandardMaterial;
   private readonly arrows: ArrowProjectile[] = [];
   private readonly impacts: Impact[] = [];
+  private arrowContainer: AssetContainer | null = null;
 
-  constructor(private readonly scene: Scene) {
+  constructor(
+    private readonly scene: Scene,
+    private readonly library: AssetLibrary,
+  ) {
     this.root = new TransformNode('arrow-system', scene);
     this.shaftMaterial = new StandardMaterial('arrow-shaft-mat', scene);
     this.shaftMaterial.diffuseColor = Color3.Black();
@@ -47,25 +54,66 @@ export class ArrowSystem {
     this.shaftMaterial.alpha = 0.95;
   }
 
+  async load(): Promise<void> {
+    if (this.arrowContainer) {
+      return;
+    }
+    this.arrowContainer = await this.library.load('custom', 'arrow');
+    if (this.arrowContainer) {
+      for (const mesh of this.arrowContainer.meshes) {
+        const material = mesh.material;
+        if (material instanceof PBRMaterial) {
+          material.emissiveColor = new Color3(0.1, 0.08, 0.06);
+        } else if (material instanceof StandardMaterial) {
+          material.emissiveColor = new Color3(0.1, 0.08, 0.06);
+        }
+      }
+    }
+  }
+
   spawn(origin: Vector3, velocity: Vector3, damage: number, floor: number, lifetime: number): void {
-    const mesh = MeshBuilder.CreateBox(
-      `arrow-${this.arrows.length}-${performance.now()}`,
-      { width: 0.07, height: 0.07, depth: 2.2 },
-      this.scene,
-    );
-    mesh.parent = this.root;
-    mesh.material = this.shaftMaterial;
-    mesh.isPickable = false;
-    mesh.position.copyFrom(origin);
-    this.orient(mesh, velocity);
+    const visual = new TransformNode(`arrow-visual-${this.arrows.length}-${performance.now()}`, this.scene);
+    visual.parent = this.root;
+    visual.position.copyFrom(origin);
+    this.attachVisual(visual);
+    this.orient(visual, velocity);
     this.arrows.push({
-      mesh,
+      visual,
       position: origin.clone(),
       velocity: velocity.clone(),
       damage,
       floor,
       life: lifetime,
     });
+  }
+
+  private attachVisual(visual: TransformNode): void {
+    if (!this.arrowContainer) {
+      const mesh = MeshBuilder.CreateBox(
+        `${visual.name}-fallback`,
+        { width: 0.05, height: 0.05, depth: 0.8 },
+        this.scene,
+      );
+      mesh.parent = visual;
+      mesh.material = this.shaftMaterial;
+      mesh.isPickable = false;
+      return;
+    }
+    const instantiated = this.arrowContainer.instantiateModelsToScene(
+      (sourceName) => `${visual.name}-${sourceName}`,
+      false,
+    );
+    for (const group of instantiated.animationGroups) {
+      group.stop();
+    }
+    for (const node of instantiated.rootNodes) {
+      node.parent = visual;
+    }
+    for (const mesh of visual.getChildMeshes()) {
+      mesh.isPickable = false;
+      mesh.receiveShadows = false;
+      mesh.alwaysSelectAsActiveMesh = true;
+    }
   }
 
   update(
@@ -142,8 +190,8 @@ export class ArrowSystem {
           break;
         }
 
-        arrow.mesh.position.copyFrom(arrow.position);
-        this.orient(arrow.mesh, arrow.velocity);
+        arrow.visual.position.copyFrom(arrow.position);
+        this.orient(arrow.visual, arrow.velocity);
       }
 
       if (hit) {
@@ -168,7 +216,7 @@ export class ArrowSystem {
 
   clear(): void {
     for (const arrow of this.arrows) {
-      arrow.mesh.dispose();
+      arrow.visual.dispose(false, false);
     }
     this.arrows.length = 0;
     for (const impact of this.impacts) {
@@ -187,7 +235,7 @@ export class ArrowSystem {
     if (!arrow) {
       return;
     }
-    arrow.mesh.dispose();
+    arrow.visual.dispose(false, false);
     this.arrows.splice(index, 1);
   }
 
@@ -209,9 +257,9 @@ export class ArrowSystem {
     this.impacts.push({ mesh, life: 0.25 });
   }
 
-  private orient(mesh: Mesh, velocity: Vector3): void {
+  private orient(node: TransformNode, velocity: Vector3): void {
     const horizontal = Math.hypot(velocity.x, velocity.z);
-    mesh.rotation.y = Math.atan2(velocity.x, velocity.z);
-    mesh.rotation.x = -Math.atan2(velocity.y, horizontal);
+    node.rotation.y = Math.atan2(velocity.x, velocity.z);
+    node.rotation.x = -Math.atan2(velocity.y, horizontal);
   }
 }
