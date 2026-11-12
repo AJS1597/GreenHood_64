@@ -26,7 +26,7 @@ export const DEFAULT_PLAYER_TUNING: PlayerTuning = {
   radius: 0.35,
   bodyHeight: 1.75,
   walkSpeed: 3.4,
-  sprintSpeed: 5.6,
+  sprintSpeed: 6.0,
   crouchSpeed: 1.6,
   acceleration: 14,
 };

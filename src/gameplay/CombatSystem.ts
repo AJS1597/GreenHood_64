@@ -157,7 +157,13 @@ export class CombatSystem {
     }
 
     this.bow.setAiming(this.aiming);
-    const targetFov = this.aiming ? this.baseFov * 0.78 : this.baseFov;
+    // Sprint widens the view to sell a dash; crouch tightens it so low
+    // movement feels deliberate without reducing the actual crouch speed.
+    const sprintFov = this.player.isSprinting ? 0.15 : 0;
+    const crouchFov = this.player.isCrouching ? -0.09 : 0;
+    const targetFov = this.aiming
+      ? this.baseFov * 0.78
+      : this.baseFov + sprintFov + crouchFov;
     this.player.camera.fov += (targetFov - this.player.camera.fov) * Math.min(1, dt * 12);
 
     const floor = this.dungeon.currentFloor;
