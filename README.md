@@ -39,6 +39,18 @@ Optional model re-export:
 pnpm assets:models
 ```
 
+## Deployment
+
+Pushes to `main` are tested, built, and deployed to GitHub Pages by
+[`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml).
+The workflow can also be run manually from the **Actions** tab.
+
+One-time setup: in the repository, open **Settings → Pages** and set
+**Build and deployment → Source** to **GitHub Actions**.
+
+The site is served at <https://ajs1597.github.io/GreenHood_64/>. The build uses
+a relative Vite `base`, so it works from that project path without extra config.
+
 ## Current state
 
 - **Sherwood camp:** fixed forest hub with a castle keep, gate, and four merchant stalls (Bows, Abilities, Training, Crowns).
