@@ -7,10 +7,12 @@ import {
   drawTimeToCharge,
   guardCanSee,
   hasLineOfSight,
+  longbowDamageMultiplier,
   noiseRadius,
   playerMaxHealth,
   pointHitsGuard,
   pointHitsWall,
+  recurveCooldownMultiplier,
   visionDistance,
   withinRadius,
 } from '../src/core/combat';
@@ -47,6 +49,13 @@ describe('combat math', () => {
     expect(full.damage).toBeCloseTo(30, 5);
 
     expect(bowStats(5, 1).damage).toBeCloseTo(75, 5);
+  });
+
+  it('applies longbow damage and recurve cooldown bonuses', () => {
+    expect(longbowDamageMultiplier(0)).toBe(1);
+    expect(longbowDamageMultiplier(3)).toBeCloseTo(1.45, 5);
+    expect(recurveCooldownMultiplier(0)).toBe(1);
+    expect(recurveCooldownMultiplier(3)).toBeCloseTo(0.85 ** 3, 5);
   });
 
   it('derives player health from training', () => {

@@ -65,16 +65,22 @@ describe('SaveStore', () => {
     expect(store.current.wallet.crowns).toBe(0);
     expect(store.current.settings.headBob).toBe(true);
     expect(store.current.equipped[0]).toBe('forest-step');
+    expect(store.current.bowUpgrades).toEqual({ longbow: 0, recurve: 0 });
   });
 
   it('clamps bow tier and abilities to valid ranks', () => {
     const storage = new MemoryStorage();
     storage.setItem(
       SAVE_KEY,
-      JSON.stringify({ bowTier: 99, abilities: { 'leaf-cloak': 12 } }),
+      JSON.stringify({
+        bowTier: 99,
+        bowUpgrades: { longbow: 12, recurve: -2 },
+        abilities: { 'leaf-cloak': 12 },
+      }),
     );
     const store = new SaveStore(storage);
     expect(store.current.bowTier).toBe(5);
+    expect(store.current.bowUpgrades).toEqual({ longbow: 3, recurve: 0 });
     expect(store.current.abilities['leaf-cloak']).toBe(3);
   });
 

@@ -10,9 +10,23 @@ import {
   type Scene,
 } from '@babylonjs/core';
 import { COMBAT, pointHitsGuard, pointHitsWall } from '../core/combat';
+import type { Aabb2 } from '../core/collision';
 import type { AssetLibrary } from '../world/AssetLibrary';
-import type { DungeonScene } from '../world/DungeonScene';
 import type { Guard } from './Guard';
+
+/** Narrow world surface needed by arrow simulation (castle or Sherwood). */
+export interface ArrowWorld {
+  readonly colliders: readonly Aabb2[];
+  /** Vertical spacing between stacked storeys. */
+  readonly floorHeight: number;
+  /** How many walkable storeys are stacked in this world. */
+  readonly floorCount: number;
+  /**
+   * True when the slab between `lowerFloor` and `lowerFloor + 1` has an
+   * opening at this position (the castle stairwell, for example).
+   */
+  isArrowOpening?(x: number, z: number, lowerFloor: number): boolean;
+}
 
 interface ArrowProjectile {
   visual: TransformNode;
@@ -120,14 +134,15 @@ export class ArrowSystem {
 
   update(
     dt: number,
-    dungeon: DungeonScene,
+    world: ArrowWorld,
     guards: readonly Guard[],
     onGuardHit: (guard: Guard, damage: number, point: Vector3) => void,
     onImpact: (point: Vector3, floor: number) => void,
   ): void {
-    const walls = dungeon.colliders;
-    const floorHeight = dungeon.floorHeight;
-    const wallHeight = dungeon.wallHeight;
+    const walls = world.colliders;
+    const floorHeight = Math.max(0.001, world.floorHeight);
+    const floorCount = Math.max(1, world.floorCount);
+    const isOpening = world.isArrowOpening?.bind(world) ?? (() => false);
 
     for (let i = this.arrows.length - 1; i >= 0; i -= 1) {
       const arrow = this.arrows[i];
@@ -147,16 +162,53 @@ export class ArrowSystem {
       let hitGuard: Guard | null = null;
 
       for (let step = 0; step < steps; step += 1) {
+        const previousY = arrow.position.y;
         arrow.velocity.y -= COMBAT.arrowGravity * stepDt;
         arrow.position.addInPlace(arrow.velocity.scale(stepDt));
+        const nextY = arrow.position.y;
 
-        const floorBase = arrow.floor * floorHeight;
-        const ceiling = floorBase + wallHeight;
-        if (arrow.position.y <= floorBase || arrow.position.y >= ceiling) {
+        if (nextY <= 0) {
+          arrow.position.y = 0;
           onImpact(arrow.position.clone(), arrow.floor);
           this.spawnImpact(arrow.position, new Color3(0.55, 0.47, 0.36));
           hit = true;
           break;
+        }
+
+        // Storey slabs are solid except where a stairwell opening lets the
+        // arrow through. Crossing one changes which floor the arrow belongs to,
+        // so an arrow fired up the stairs can hit guards on the floor above.
+        if (nextY > previousY) {
+          const boundaryFloor = Math.floor(nextY / floorHeight);
+          const boundaryY = boundaryFloor * floorHeight;
+          if (boundaryFloor > 0 && previousY < boundaryY) {
+            const lowerFloor = boundaryFloor - 1;
+            if (
+              boundaryFloor >= floorCount ||
+              !isOpening(arrow.position.x, arrow.position.z, lowerFloor)
+            ) {
+              arrow.position.y = boundaryY;
+              onImpact(arrow.position.clone(), arrow.floor);
+              this.spawnImpact(arrow.position, new Color3(0.55, 0.47, 0.36));
+              hit = true;
+              break;
+            }
+            arrow.floor = boundaryFloor;
+          }
+        } else if (nextY < previousY) {
+          const boundaryFloor = Math.floor(previousY / floorHeight);
+          const boundaryY = boundaryFloor * floorHeight;
+          if (boundaryFloor > 0 && nextY < boundaryY) {
+            const lowerFloor = boundaryFloor - 1;
+            if (!isOpening(arrow.position.x, arrow.position.z, lowerFloor)) {
+              arrow.position.y = boundaryY;
+              onImpact(arrow.position.clone(), arrow.floor);
+              this.spawnImpact(arrow.position, new Color3(0.55, 0.47, 0.36));
+              hit = true;
+              break;
+            }
+            arrow.floor = lowerFloor;
+          }
         }
 
         const wallHit = walls.some((box) =>

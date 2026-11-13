@@ -203,7 +203,7 @@ export class App {
     if (this.location === 'hub') {
       this.hub?.update(deltaMs / 1000);
     }
-    if (this.location === 'castle' && this.state === 'playing') {
+    if (this.state === 'playing') {
       this.combat.update(deltaMs);
     }
     if (this.location === 'castle' && this.castle && this.state === 'playing') {
@@ -341,6 +341,8 @@ export class App {
   private async enterCastle(): Promise<void> {
     this.state = 'boot';
     this.hud.setPrompt(null);
+    // Drop any arrows left in Sherwood before the scene swaps.
+    this.combat.leaveCastle();
     await this.fadeThrough(async () => {
       this.hub?.dispose();
       this.hub = null;
@@ -420,7 +422,7 @@ export class App {
     }
     this.refreshWallet();
     this.state = 'playing';
-    this.combat.setInputEnabled(false);
+    this.combat.setInputEnabled(this.player.isLocked);
     this.hud.showToast(banked > 0 ? `Banked ${banked} gold` : 'Back in Sherwood');
   }
 
@@ -444,7 +446,7 @@ export class App {
     this.runKeys = 0;
     this.refreshWallet();
     this.state = 'playing';
-    this.combat.setInputEnabled(false);
+    this.combat.setInputEnabled(this.player.isLocked);
     this.hud.showToast(lost > 0 ? `You died — lost ${lost} gold` : 'You died');
   }
 
@@ -488,7 +490,7 @@ export class App {
     this.runKeys = 0;
     this.refreshWallet();
     this.state = 'playing';
-    this.combat.setInputEnabled(false);
+    this.combat.setInputEnabled(this.player.isLocked);
     this.outro = false;
     this.hud.showToast(
       `King slain · +${BOSS.crownReward} crowns${banked > 0 ? ` · banked ${banked} gold` : ''}`,
@@ -509,6 +511,7 @@ export class App {
     this.player.colliders = hub.colliders;
     this.player.bounds = hub.bounds;
     this.player.spawn(hub.spawn.x, hub.spawn.z, hub.spawn.yaw);
+    this.combat.enterHub(hub);
     this.player.camera.maxZ = 400;
     this.host.scene.clearColor = HUB_CLEAR;
     this.hud.setFloor(null);

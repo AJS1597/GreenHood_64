@@ -5,7 +5,9 @@ import {
   COMBAT,
   bowStats,
   drawTimeToCharge,
+  longbowDamageMultiplier,
   noiseRadius,
+  recurveCooldownMultiplier,
   visionDistance,
   type NoiseLevel,
 } from '../core/combat';
@@ -13,6 +15,7 @@ import { DEBUG } from '../core/config';
 import type { SaveStore } from '../app/SaveStore';
 import type { AssetLibrary } from '../world/AssetLibrary';
 import type { DungeonScene } from '../world/DungeonScene';
+import type { HubScene } from '../world/HubScene';
 import { ArrowSystem } from './Arrows';
 import type { BowViewModel } from './BowViewModel';
 import type { Guard } from './Guard';
@@ -32,6 +35,7 @@ export class CombatSystem {
   private readonly alerted = new Set<Guard>();
 
   private dungeon: DungeonScene | null = null;
+  private hub: HubScene | null = null;
   private active = false;
   private health = COMBAT.playerBaseHealth;
   private maxHealth = COMBAT.playerBaseHealth;
@@ -71,19 +75,36 @@ export class CombatSystem {
     this.inputEnabled = enabled;
   }
 
+  get isActive(): boolean {
+    return this.active;
+  }
+
+  /**
+   * Enable the bow in Sherwood. There are no guards to fight, but the same
+   * charge/fire/arrow pipeline runs so the camp feels like part of the game.
+   */
+  enterHub(hub: HubScene): void {
+    this.dungeon = null;
+    this.hub = hub;
+    this.active = true;
+    this.inputEnabled = false;
+    this.resetActionState();
+    this.arrows.clear();
+    this.hud.setHealth(null);
+    this.hud.setBoss(null, 0, 0);
+    this.hud.setAlert(false);
+    this.hud.setCharge(0);
+    this.player.camera.fov = this.baseFov;
+  }
+
   enterCastle(dungeon: DungeonScene, maxHealth: number): void {
+    this.hub = null;
     this.dungeon = dungeon;
     this.active = true;
     this.inputEnabled = false;
     this.maxHealth = maxHealth;
     this.health = maxHealth;
-    this.charging = false;
-    this.charge = 0;
-    this.chargeTime = 0;
-    this.cooldown = 0;
-    this.invulnerable = 0;
-    this.takedownTarget = null;
-    this.alerted.clear();
+    this.resetActionState();
     this.arrows.clear();
     this.bow.setDraw(0);
     this.bow.setCharging(false);
@@ -113,10 +134,8 @@ export class CombatSystem {
     this.active = false;
     this.inputEnabled = false;
     this.dungeon = null;
-    this.charging = false;
-    this.charge = 0;
-    this.takedownTarget = null;
-    this.alerted.clear();
+    this.hub = null;
+    this.resetActionState();
     this.arrows.clear();
     this.bow.setDraw(0);
     this.bow.setCharging(false);
@@ -125,6 +144,16 @@ export class CombatSystem {
     this.hud.setBoss(null, 0, 0);
     this.hud.setAlert(false);
     this.hud.setCharge(0);
+  }
+
+  private resetActionState(): void {
+    this.charging = false;
+    this.charge = 0;
+    this.chargeTime = 0;
+    this.cooldown = 0;
+    this.invulnerable = 0;
+    this.takedownTarget = null;
+    this.alerted.clear();
   }
 
   cancel(): void {
@@ -138,9 +167,12 @@ export class CombatSystem {
   }
 
   update(deltaMs: number): void {
-    if (!this.active || !this.dungeon) {
+    const world = this.dungeon ?? this.hub;
+    if (!this.active || !world) {
       return;
     }
+    const dungeon = this.dungeon;
+    const guards = dungeon?.guards ?? [];
     const dt = Math.min(deltaMs, 50) / 1000;
     this.cooldown = Math.max(0, this.cooldown - dt);
     this.invulnerable = Math.max(0, this.invulnerable - dt);
@@ -163,51 +195,53 @@ export class CombatSystem {
     const targetFov = this.baseFov + sprintFov + crouchFov;
     this.player.camera.fov += (targetFov - this.player.camera.fov) * Math.min(1, dt * 12);
 
-    const floor = this.dungeon.currentFloor;
-    const playerView = {
-      x: this.player.position.x,
-      z: this.player.position.z,
-      floor,
-      crouching: this.player.isCrouching,
-      moving: this.player.speed > 0.35,
-    };
-    const level: NoiseLevel = !playerView.moving
-      ? 'still'
-      : this.player.isCrouching
-        ? 'crouch'
-        : this.player.isSprinting
-          ? 'sprint'
-          : 'walk';
-    const noise = noiseRadius(level, this.save.current.training.quietSteps);
-    const viewDistance = visionDistance(this.save.current.training.stealth);
+    const floor = dungeon?.currentFloor ?? 0;
+    if (dungeon) {
+      const playerView = {
+        x: this.player.position.x,
+        z: this.player.position.z,
+        floor,
+        crouching: this.player.isCrouching,
+        moving: this.player.speed > 0.35,
+      };
+      const level: NoiseLevel = !playerView.moving
+        ? 'still'
+        : this.player.isCrouching
+          ? 'crouch'
+          : this.player.isSprinting
+            ? 'sprint'
+            : 'walk';
+      const noise = noiseRadius(level, this.save.current.training.quietSteps);
+      const viewDistance = visionDistance(this.save.current.training.stealth);
 
-    for (const guard of this.dungeon.guards) {
-      if (guard.floor !== floor) {
-        continue;
-      }
-      guard.update(dt, playerView, viewDistance, noise);
-      if (guard.isAlerted && !this.alerted.has(guard)) {
-        this.alerted.add(guard);
-        for (const other of this.dungeon.guards) {
-          if (other === guard || other.floor !== guard.floor || !other.isAlive) {
-            continue;
-          }
-          if (Math.hypot(other.x - guard.x, other.z - guard.z) <= COMBAT.guardAlertRadius) {
-            other.alertAt(guard.x, guard.z);
+      for (const guard of guards) {
+        if (guard.floor !== floor) {
+          continue;
+        }
+        guard.update(dt, playerView, viewDistance, noise);
+        if (guard.isAlerted && !this.alerted.has(guard)) {
+          this.alerted.add(guard);
+          for (const other of guards) {
+            if (other === guard || other.floor !== guard.floor || !other.isAlive) {
+              continue;
+            }
+            if (Math.hypot(other.x - guard.x, other.z - guard.z) <= COMBAT.guardAlertRadius) {
+              other.alertAt(guard.x, guard.z);
+            }
           }
         }
       }
-    }
-    for (const guard of this.alerted) {
-      if (!guard.isAlerted) {
-        this.alerted.delete(guard);
+      for (const guard of this.alerted) {
+        if (!guard.isAlerted) {
+          this.alerted.delete(guard);
+        }
       }
     }
 
     this.arrows.update(
       dt,
-      this.dungeon,
-      this.dungeon.guards,
+      world,
+      guards,
       (guard, damage, point) => {
         guard.takeDamage(damage, this.player.position);
         this.hud.showHitMarker();
@@ -219,9 +253,9 @@ export class CombatSystem {
     );
 
     this.takedownTarget = null;
-    if (this.player.isCrouching) {
+    if (dungeon && this.player.isCrouching) {
       let best = COMBAT.takedownRange;
-      for (const guard of this.dungeon.guards) {
+      for (const guard of guards) {
         if (guard.floor !== floor || !guard.isAlive) {
           continue;
         }
@@ -237,14 +271,16 @@ export class CombatSystem {
       }
     }
 
-    this.hud.setHealth(this.health, this.maxHealth);
-    const boss = this.dungeon.boss;
-    this.hud.setBoss(
-      boss && boss.isAlive && boss.floor === floor ? BOSS.name : null,
-      boss?.health ?? 0,
-      boss?.maxHealth ?? 0,
-    );
-    this.hud.setAlert(this.dungeon.guards.some((guard) => guard.isAlerted));
+    if (dungeon) {
+      this.hud.setHealth(this.health, this.maxHealth);
+      const boss = dungeon.boss;
+      this.hud.setBoss(
+        boss && boss.isAlive && boss.floor === floor ? BOSS.name : null,
+        boss?.health ?? 0,
+        boss?.maxHealth ?? 0,
+      );
+      this.hud.setAlert(guards.some((guard) => guard.isAlerted));
+    }
   }
 
   takedownPrompt(): string | null {
@@ -346,10 +382,13 @@ export class CombatSystem {
   }
 
   private fire(): void {
-    if (!this.active || !this.dungeon) {
+    const world = this.dungeon ?? this.hub;
+    if (!this.active || !world) {
       return;
     }
+    const floor = this.dungeon?.currentFloor ?? 0;
     const stats = bowStats(this.save.current.bowTier, this.charge);
+    stats.damage *= longbowDamageMultiplier(this.save.current.bowUpgrades.longbow);
     const camera = this.player.camera;
     const forward = camera.getForwardRay(1).direction.normalize();
     const right = camera.getDirection(Vector3.Right()).normalize();
@@ -366,11 +405,12 @@ export class CombatSystem {
       origin,
       direction.scale(stats.speed),
       stats.damage,
-      this.dungeon.currentFloor,
+      floor,
       stats.lifetime,
     );
-    this.makeNoise(origin.x, origin.z, this.dungeon.currentFloor, 14);
-    this.cooldown = COMBAT.fireCooldown;
+    this.makeNoise(origin.x, origin.z, floor, 14);
+    this.cooldown =
+      COMBAT.fireCooldown * recurveCooldownMultiplier(this.save.current.bowUpgrades.recurve);
     this.charging = false;
     this.charge = 0;
     this.chargeTime = 0;

@@ -22,6 +22,7 @@ import {
   worldBoundsFor,
   type Dungeon,
   type FloorLayout,
+  type Room,
 } from '../core/dungeon';
 import { createRng } from '../core/rng';
 import { Guard } from '../gameplay/Guard';
@@ -41,6 +42,8 @@ const CEILING_DROP = 0.02;
 /** The stair flight is fitted into a single storey. */
 const STAIR_TOP_LOCAL_Z = 2.0;
 const STAIR_BOTTOM_LOCAL_Z = 3.4;
+/** Pull the back wall off the top step's face so the two never z-fight. */
+const STAIR_WALL_GAP = 0.03;
 
 export interface DungeonInteractable {
   id: string;
@@ -75,6 +78,7 @@ export class DungeonScene {
   boss: Guard | null = null;
   interactables: DungeonInteractable[] = [];
   currentFloor = 0;
+  readonly floorCount = 2;
 
   private readonly library: AssetLibrary;
   private readonly scene: Scene;
@@ -229,6 +233,21 @@ export class DungeonScene {
   private rampHeight(z: number): number {
     const t = (this.stairBottomZ - z) / (this.stairBottomZ - this.stairTopZ);
     return Math.max(0, Math.min(1, t)) * FLOOR_H;
+  }
+
+  /** True where arrows can pass vertically through the storey slab. */
+  isArrowOpening(x: number, z: number, lowerFloor: number): boolean {
+    if (lowerFloor !== 0) {
+      return false;
+    }
+    const stairs = this.dungeon.stairs;
+    const stairX = stairs.x * TILE;
+    const half = TILE / 2;
+    return (
+      Math.abs(x - stairX) <= half &&
+      z >= (stairs.z - 1) * TILE - half &&
+      z <= stairs.z * TILE + half
+    );
   }
 
   /** Keep the visible storey and HUD in sync with the player's feet. */
@@ -491,11 +510,62 @@ export class DungeonScene {
           });
         }
       }
-      const banner = await this.cloneMesh('mini', 'banner', parent);
-      if (banner) {
-        banner.position = new Vector3(room.x * TILE, baseY + 2.1, room.z * TILE - (room.radius * TILE - 2));
-      }
+      await this.decorateBanner(layout, parent, room, baseY);
     }
+  }
+
+  /**
+   * Hang a banner flat against whichever room wall is solid, with its top just
+   * below the ceiling. Previously they floated near the room centre and could
+   * intersect columns or corridors.
+   */
+  private async decorateBanner(
+    layout: FloorLayout,
+    parent: TransformNode,
+    room: Room,
+    baseY: number,
+  ): Promise<Mesh | null> {
+    const r = room.radius;
+    const hasWall = {
+      north: !isFloor(layout, room.x, room.z - r - 1),
+      south: !isFloor(layout, room.x, room.z + r + 1),
+      west: !isFloor(layout, room.x - r - 1, room.z),
+      east: !isFloor(layout, room.x + r + 1, room.z),
+    };
+    const side = (room.kind === 'entrance'
+      ? (['south', 'east', 'west'] as const)
+      : (['north', 'south', 'east', 'west'] as const)
+    ).find((entry) => hasWall[entry]);
+    if (!side) {
+      return null;
+    }
+
+    const banner = await this.cloneMesh('mini', 'banner', parent);
+    if (!banner) {
+      return null;
+    }
+    const scale = 1.7;
+    banner.rotationQuaternion = null;
+    banner.scaling.setAll(scale);
+    const x = room.x * TILE;
+    const z = room.z * TILE;
+    const gap = 0.525 * scale + 0.02;
+    banner.position.y = baseY + WALL_H - 0.05 - 0.875 * scale;
+
+    if (side === 'north') {
+      banner.rotation.set(0, 0, 0);
+      banner.position.set(x, banner.position.y, (room.z - r - 0.5) * TILE + 0.1 + gap);
+    } else if (side === 'south') {
+      banner.rotation.set(0, Math.PI, 0);
+      banner.position.set(x, banner.position.y, (room.z + r + 0.5) * TILE - 0.1 - gap);
+    } else if (side === 'west') {
+      banner.rotation.set(0, Math.PI / 2, 0);
+      banner.position.set((room.x - r - 0.5) * TILE + 0.1 + gap, banner.position.y, z);
+    } else {
+      banner.rotation.set(0, -Math.PI / 2, 0);
+      banner.position.set((room.x + r + 0.5) * TILE - 0.1 - gap, banner.position.y, z);
+    }
+    return banner;
   }
 
   private async buildStairs(): Promise<void> {
@@ -553,7 +623,7 @@ export class DungeonScene {
     // already there and a second wall would z-fight.
     const northOpen = isFloor(floor0, stairCellX, this.dungeon.stairs.z - 2);
     if (northOpen) {
-      await addThinWall(this.floorRoots[0]!, stairX, 0, this.stairTopZ, Math.PI);
+      await addThinWall(this.floorRoots[0]!, stairX, 0, this.stairTopZ - STAIR_WALL_GAP, Math.PI);
     }
 
     // The normal floor-0 wall at the stair head is full height and would stop a

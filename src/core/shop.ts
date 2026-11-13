@@ -1,4 +1,4 @@
-import type { AbilityId, SaveData } from '../app/types';
+import type { AbilityId, BowUpgradeId, SaveData } from '../app/types';
 
 export type ShopCategory = 'bows' | 'abilities' | 'training';
 export type ShopTab = ShopCategory | 'crowns';
@@ -13,6 +13,7 @@ export interface ShopItem {
   /** Cost to advance from rank r to r+1, so length === max rank. */
   prices: readonly number[];
   abilityId?: AbilityId;
+  bowUpgrade?: BowUpgradeId;
   trainingKey?: 'maxHealth' | 'moveSpeed' | 'quietSteps' | 'stealth';
 }
 
@@ -24,6 +25,24 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     description: 'Stronger draws and faster shots. Five tiers.',
     currency: 'gold',
     prices: [120, 280, 550, 950],
+  },
+  {
+    id: 'longbow',
+    category: 'bows',
+    name: 'Yew Longbow',
+    description: 'Heavier limbs drive arrows deeper. +15% damage per rank.',
+    currency: 'gold',
+    prices: [450, 900, 1500],
+    bowUpgrade: 'longbow',
+  },
+  {
+    id: 'recurve',
+    category: 'bows',
+    name: 'Swift Recurve',
+    description: 'A springy frame recovers faster. 15% shorter shot cooldown per rank.',
+    currency: 'gold',
+    prices: [400, 800, 1400],
+    bowUpgrade: 'recurve',
   },
   {
     id: 'forest-step',
@@ -60,6 +79,24 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
     currency: 'crowns',
     prices: [3, 5, 8],
     abilityId: 'hunters-focus',
+  },
+  {
+    id: 'smoke-veil',
+    category: 'abilities',
+    name: 'Smoke Veil',
+    description: "A burst of leaves breaks a guard's line of sight. Three levels.",
+    currency: 'crowns',
+    prices: [2, 4, 6],
+    abilityId: 'smoke-veil',
+  },
+  {
+    id: 'keen-eye',
+    category: 'abilities',
+    name: 'Keen Eye',
+    description: 'Reveal guard sightlines and glint loot through thin walls.',
+    currency: 'crowns',
+    prices: [3, 6, 9],
+    abilityId: 'keen-eye',
   },
   {
     id: 'maxHealth',
@@ -103,6 +140,9 @@ export const SHOP_ITEMS: readonly ShopItem[] = [
 export function rankOf(save: SaveData, item: ShopItem): number {
   if (item.id === 'bow') {
     return save.bowTier - 1;
+  }
+  if (item.bowUpgrade) {
+    return save.bowUpgrades[item.bowUpgrade];
   }
   if (item.abilityId) {
     return save.abilities[item.abilityId];
@@ -161,6 +201,8 @@ export function purchase(save: SaveData, item: ShopItem): boolean {
 
   if (item.id === 'bow') {
     save.bowTier = Math.min(5, save.bowTier + 1);
+  } else if (item.bowUpgrade) {
+    save.bowUpgrades[item.bowUpgrade] = Math.min(3, save.bowUpgrades[item.bowUpgrade] + 1);
   } else if (item.abilityId) {
     save.abilities[item.abilityId] = Math.min(3, save.abilities[item.abilityId] + 1);
     equipIfEmpty(save, item.abilityId);

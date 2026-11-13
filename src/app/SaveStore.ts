@@ -1,4 +1,4 @@
-import { SAVE_KEY, type AbilityId, type SaveData } from './types';
+import { SAVE_KEY, type AbilityId, type BowUpgradeId, type SaveData } from './types';
 
 /** Every ability starts locked; level 1 is the first unlock. */
 const DEFAULT_ABILITIES: Record<AbilityId, number> = {
@@ -6,7 +6,16 @@ const DEFAULT_ABILITIES: Record<AbilityId, number> = {
   'coin-toss': 0,
   'leaf-cloak': 0,
   'hunters-focus': 0,
+  'smoke-veil': 0,
+  'keen-eye': 0,
 };
+
+const DEFAULT_BOW_UPGRADES: Record<BowUpgradeId, number> = {
+  longbow: 0,
+  recurve: 0,
+};
+
+const ABILITY_IDS: readonly AbilityId[] = Object.keys(DEFAULT_ABILITIES) as AbilityId[];
 
 /** Fresh-save template. Returned by value so callers can't mutate the default. */
 export function createDefaultSave(): SaveData {
@@ -14,6 +23,7 @@ export function createDefaultSave(): SaveData {
     version: 1,
     wallet: { gold: 0, crowns: 0 },
     bowTier: 1,
+    bowUpgrades: { ...DEFAULT_BOW_UPGRADES },
     abilities: { ...DEFAULT_ABILITIES },
     training: { maxHealth: 0, moveSpeed: 0, quietSteps: 0, stealth: 0 },
     equipped: ['forest-step', null],
@@ -111,6 +121,7 @@ function mergeWithDefaults(value: unknown): SaveData {
     return defaults;
   }
   const wallet = isRecord(value.wallet) ? value.wallet : {};
+  const bowUpgrades = isRecord(value.bowUpgrades) ? value.bowUpgrades : {};
   const abilities = isRecord(value.abilities) ? value.abilities : {};
   const training = isRecord(value.training) ? value.training : {};
   const settings = isRecord(value.settings) ? value.settings : {};
@@ -123,11 +134,17 @@ function mergeWithDefaults(value: unknown): SaveData {
       crowns: numberOr(wallet.crowns, defaults.wallet.crowns),
     },
     bowTier: clamp(numberOr(value.bowTier, defaults.bowTier), 1, 5),
+    bowUpgrades: {
+      longbow: rankOr(bowUpgrades.longbow),
+      recurve: rankOr(bowUpgrades.recurve),
+    },
     abilities: {
       'forest-step': rankOr(abilities['forest-step']),
       'coin-toss': rankOr(abilities['coin-toss']),
       'leaf-cloak': rankOr(abilities['leaf-cloak']),
       'hunters-focus': rankOr(abilities['hunters-focus']),
+      'smoke-veil': rankOr(abilities['smoke-veil']),
+      'keen-eye': rankOr(abilities['keen-eye']),
     },
     training: {
       maxHealth: rankOr(training.maxHealth),
@@ -184,8 +201,7 @@ function abilityOr(
     return fallback;
   }
   const candidate = equipped[index];
-  const valid: AbilityId[] = ['forest-step', 'coin-toss', 'leaf-cloak', 'hunters-focus'];
-  return typeof candidate === 'string' && (valid as string[]).includes(candidate)
+  return typeof candidate === 'string' && (ABILITY_IDS as readonly string[]).includes(candidate)
     ? (candidate as AbilityId)
     : null;
 }

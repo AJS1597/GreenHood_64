@@ -52,9 +52,24 @@ describe('shop', () => {
     expect(canPurchase(save, endurance).reason).toBe('Maxed');
   });
 
-  it('groups items by tab', () => {
-    expect(itemsForTab('bows').map((item) => item.id)).toEqual(['bow']);
+  it('groups items by tab and stocks every shop', () => {
+    expect(itemsForTab('bows').map((item) => item.id)).toContain('bow');
     expect(itemsForTab('crowns').every((item) => item.currency === 'crowns')).toBe(true);
-    expect(itemsForTab('crowns').length).toBe(2);
+    for (const tab of ['bows', 'abilities', 'training', 'crowns'] as const) {
+      expect(itemsForTab(tab).length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('buys bow upgrades with gold', () => {
+    const save = createDefaultSave();
+    const longbow = SHOP_ITEMS.find((item) => item.id === 'longbow')!;
+    const recurve = SHOP_ITEMS.find((item) => item.id === 'recurve')!;
+    save.wallet.gold = 450;
+    expect(purchase(save, longbow)).toBe(true);
+    expect(save.bowUpgrades.longbow).toBe(1);
+    expect(nextPrice(save, longbow)).toBe(900);
+    save.wallet.gold = 400;
+    expect(purchase(save, recurve)).toBe(true);
+    expect(save.bowUpgrades.recurve).toBe(1);
   });
 });

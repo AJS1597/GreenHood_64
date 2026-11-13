@@ -32,7 +32,9 @@ interface PlaceOptions {
   scale?: number;
   targetHeight?: number;
   y?: number;
-  collider?: { halfX: number; halfZ: number };
+  collider?: { halfX: number; halfZ: number; fit?: boolean };
+  /** Shift the visual bounds so their centre lands on x/z. */
+  centerXZ?: boolean;
   shadow?: boolean;
 }
 
@@ -40,6 +42,21 @@ interface PlaceOptions {
 const SPAWN = { x: 0, z: 16, yaw: Math.PI };
 const WORLD_BOUNDS: Bounds2 = { minX: -34, minZ: -34, maxX: 34, maxZ: 34 };
 const SUN_TRAVEL = new Vector3(-0.5, -1, 0.6);
+/** Fixed prop clusters the randomised tree pass must leave clear. */
+const CLUTTER_CLEARINGS = [
+  { x: -13, z: 12.5 },
+  { x: 13.5, z: 11.5 },
+  { x: -18, z: -13 },
+  { x: 18, z: -12 },
+  { x: -11.5, z: 2 },
+  { x: 11.5, z: -1 },
+  { x: -13, z: -8 },
+  { x: 13, z: -9 },
+  { x: 12.5, z: 6.5 },
+  { x: 10.5, z: 8.5 },
+  { x: -4.6, z: 9.2 },
+  { x: 4.6, z: 9.2 },
+];
 
 /**
  * The Sherwood camp: a safe, hand-authored clearing that never changes between
@@ -96,6 +113,14 @@ export class HubScene {
   update(dt: number): void {
     this.sky.update?.(dt);
   }
+
+  /** Flat camp floor; arrows use the same world interface as the dungeon. */
+  get floorHeight(): number {
+    // One outdoor storey; this is only the arrow simulation's ceiling height.
+    return 12;
+  }
+
+  readonly floorCount = 1;
 
   async build(): Promise<void> {
     this.buildGround();
@@ -160,12 +185,24 @@ export class HubScene {
   }
 
   private async buildGate(): Promise<void> {
-    await this.place('town', 'wall-arch', 0, -19, { targetHeight: 6.4, collider: { halfX: 4.2, halfZ: 1.4 } });
-    await this.place('mini', 'gate', 0, -19.2, { targetHeight: 4.4, y: 0.02 });
-    await this.place('town', 'banner-green', -3.6, -19.1, { targetHeight: 3.4, y: 3.2, rotY: Math.PI });
-    await this.place('town', 'banner-green', 3.6, -19.1, { targetHeight: 3.4, y: 3.2, rotY: Math.PI });
-    await this.place('town', 'lantern', -4.6, -17.5, { targetHeight: 3.6, collider: { halfX: 0.2, halfZ: 0.2 } });
-    await this.place('town', 'lantern', 4.6, -17.5, { targetHeight: 3.6, collider: { halfX: 0.2, halfZ: 0.2 } });
+    // The gatehouse portal is 5.4 m wide and 5.8 m tall. Fill it with the gate
+    // instead of leaving a black frame around a much smaller door.
+    await this.place('mini', 'gate', 0, -20.25, { targetHeight: 5.6 });
+    // Two stone pillars hug the door edges and mirror each other.
+    for (const side of [-1, 1]) {
+      await this.place('town', 'pillar-stone', side * 3.5, -20.25, {
+        targetHeight: 6.2,
+        collider: { halfX: 0.5, halfZ: 0.5, fit: true },
+      });
+      await this.place('town', 'banner-green', side * 4.5, -20.0, {
+        targetHeight: 3.4,
+        y: 3.2,
+        rotY: Math.PI,
+        centerXZ: true,
+      });
+    }
+    await this.place('town', 'lantern', -4.6, -17.5, { targetHeight: 3.6, collider: { halfX: 0.2, halfZ: 0.2, fit: true } });
+    await this.place('town', 'lantern', 4.6, -17.5, { targetHeight: 3.6, collider: { halfX: 0.2, halfZ: 0.2, fit: true } });
 
     this.interactables.push({
       id: 'castle',
@@ -262,14 +299,15 @@ export class HubScene {
   private async buildCampDressing(): Promise<void> {
     const rng = createRng(0xca11);
 
-    // Fence panels lining the approach to the gate, broken on one side.
-    for (let z = 14; z >= 9; z -= 2) {
+    // Fence panels lining the approach to the gate, broken on one side. The
+    // panel is ~2.9 m long once scaled, so step by that much to avoid overlaps.
+    for (let z = 14; z >= 8; z -= 3) {
       for (const side of [-1, 1]) {
-        const broken = side < 0 && z <= 10;
+        const broken = side < 0 && z <= 11;
         await this.place('town', broken ? 'fence-broken' : 'fence', side * 3.1, z, {
           targetHeight: 1.1,
           rotY: Math.PI / 2,
-          collider: { halfX: 0.25, halfZ: 1 },
+          collider: { halfX: 0.25, halfZ: 1.45, fit: true },
         });
       }
     }
@@ -279,7 +317,7 @@ export class HubScene {
       for (const side of [-1, 1]) {
         await this.place('town', 'lantern', side * 2.5, z, {
           targetHeight: 3.1,
-          collider: { halfX: 0.2, halfZ: 0.2 },
+          collider: { halfX: 0.2, halfZ: 0.2, fit: true },
         });
       }
     }
@@ -288,8 +326,8 @@ export class HubScene {
     const clusters = [
       { x: -13, z: 12.5 },
       { x: 13.5, z: 11.5 },
-      { x: -14, z: -10 },
-      { x: 13, z: -12 },
+      { x: -18, z: -13 },
+      { x: 18, z: -12 },
       { x: -11.5, z: 2 },
       { x: 11.5, z: -1 },
     ];
@@ -297,15 +335,16 @@ export class HubScene {
       await this.place('mini', 'barrel', cluster.x, cluster.z, {
         scale: 3.2,
         rotY: rng.floatBetween(0, Math.PI * 2),
-        collider: { halfX: 0.8, halfZ: 0.8 },
+        collider: { halfX: 0.8, halfZ: 0.8, fit: true },
       });
-      await this.place('mini', 'barrel', cluster.x + 1.4, cluster.z + 0.9, {
+      await this.place('mini', 'barrel', cluster.x + 1.9, cluster.z + 1.1, {
         scale: 2.8,
         rotY: rng.floatBetween(0, Math.PI * 2),
+        collider: { halfX: 0.7, halfZ: 0.7, fit: true },
       });
-      await this.place('mini', 'pot', cluster.x - 1.3, cluster.z + 0.7, {
+      await this.place('mini', 'pot', cluster.x - 1.8, cluster.z + 1.0, {
         scale: 2.4,
-        collider: { halfX: 0.5, halfZ: 0.5 },
+        collider: { halfX: 0.6, halfZ: 0.6, fit: true },
       });
     }
 
@@ -314,14 +353,14 @@ export class HubScene {
     await this.place('mini', 'table', 12.5, 6.5, {
       scale: 2.6,
       rotY: -0.5,
-      collider: { halfX: 1, halfZ: 0.6 },
+      collider: { halfX: 1, halfZ: 0.6, fit: true },
     });
 
     // Second cart and a scatter of stones in the clearing.
     await this.place('town', 'cart', 13, -9, {
       scale: 3,
       rotY: -0.7,
-      collider: { halfX: 1.6, halfZ: 1.4 },
+      collider: { halfX: 1.6, halfZ: 1.4, fit: true },
     });
     for (let i = 0; i < 12; i += 1) {
       const angle = rng.floatBetween(0, Math.PI * 2);
@@ -332,9 +371,14 @@ export class HubScene {
       if (Math.abs(x) < 4.5 || (Math.abs(x) < 8 && z > -22 && z < 2)) {
         continue;
       }
+      // Do not drop stones into the fixed prop clusters.
+      if (CLUTTER_CLEARINGS.some((spot) => Math.hypot(x - spot.x, z - spot.z) < 3)) {
+        continue;
+      }
       await this.place('town', 'rock-small', x, z, {
         scale: rng.floatBetween(0.9, 1.5),
         rotY: rng.floatBetween(0, Math.PI * 2),
+        collider: { halfX: 0.3, halfZ: 0.3, fit: true },
       });
     }
   }
@@ -351,10 +395,16 @@ export class HubScene {
       await this.place(stall.kit, stall.name, stall.x, stall.z, {
         scale: 4.5,
         rotY: stall.facing,
-        collider: { halfX: 2.8, halfZ: 2.2 },
+        collider: { halfX: 2.8, halfZ: 2.2, fit: true },
       });
-      await this.place('mini', 'barrel', stall.x, stall.z - 2.6, { scale: 3.2, collider: { halfX: 0.9, halfZ: 0.9 } });
-      await this.place('mini', 'barrel', stall.x, stall.z + 2.6, { scale: 3.2, collider: { halfX: 0.9, halfZ: 0.9 } });
+      await this.place('mini', 'barrel', stall.x, stall.z - 2.6, {
+        scale: 3.2,
+        collider: { halfX: 0.9, halfZ: 0.9, fit: true },
+      });
+      await this.place('mini', 'barrel', stall.x, stall.z + 2.6, {
+        scale: 3.2,
+        collider: { halfX: 0.9, halfZ: 0.9, fit: true },
+      });
 
       // A plane faces -Z, so the sign uses the opposite rotation to the stall
       // in order to face the road.
@@ -366,9 +416,11 @@ export class HubScene {
       await this.place('town', 'stall-bench', stall.x + inward * 2.8, stall.z + 1.5, {
         targetHeight: 1,
         rotY: stall.facing,
+        collider: { halfX: 0.8, halfZ: 0.35, fit: true },
       });
       await this.place('town', 'stall-stool', stall.x + inward * 3.2, stall.z - 1.4, {
         targetHeight: 0.8,
+        collider: { halfX: 0.3, halfZ: 0.3, fit: true },
       });
 
       this.interactables.push({
@@ -380,9 +432,21 @@ export class HubScene {
       });
     }
 
-    await this.place('town', 'cart', -13, -8, { scale: 3, rotY: 0.6, collider: { halfX: 1.6, halfZ: 1.4 } });
-    await this.place('mini', 'pot', -5.5, 6.5, { scale: 2.6, collider: { halfX: 0.6, halfZ: 0.6 } });
-    await this.place('mini', 'pot', 5.5, 6.5, { scale: 2.6, collider: { halfX: 0.6, halfZ: 0.6 } });
+    await this.place('town', 'cart', -13, -8, {
+      scale: 3,
+      rotY: 0.6,
+      collider: { halfX: 1.6, halfZ: 1.4, fit: true },
+    });
+    // Pots sit clear of the stall footprints so their rims do not clip the
+    // benches or canopy posts.
+    await this.place('mini', 'pot', -4.6, 9.2, {
+      scale: 2.6,
+      collider: { halfX: 0.6, halfZ: 0.6, fit: true },
+    });
+    await this.place('mini', 'pot', 4.6, 9.2, {
+      scale: 2.6,
+      collider: { halfX: 0.6, halfZ: 0.6, fit: true },
+    });
   }
 
   /**
@@ -456,7 +520,10 @@ export class HubScene {
       await this.place('town', rng.pick(['rock-small', 'rock-small', 'rock-wide']), x, z, {
         scale: rng.floatBetween(1.2, 1.9),
         rotY: rng.floatBetween(0, Math.PI * 2),
-        collider: Math.abs(x) <= 34 && Math.abs(z) <= 34 ? { halfX: 0.6, halfZ: 0.6 } : undefined,
+        collider:
+          Math.abs(x) <= 34 && Math.abs(z) <= 34
+            ? { halfX: 0.6, halfZ: 0.6, fit: true }
+            : undefined,
       });
     }
   }
@@ -466,7 +533,10 @@ export class HubScene {
     const onRoad = Math.abs(x) < 7 && z > -22 && z < 18;
     const inCampCore = Math.abs(x) < 12 && z > -12 && z < 12;
     const inCastle = z < -18 && Math.abs(x) < 17;
-    return onRoad || inCampCore || inCastle;
+    const nearClutter = CLUTTER_CLEARINGS.some(
+      (spot) => Math.hypot(x - spot.x, z - spot.z) < 4.2,
+    );
+    return onRoad || inCampCore || inCastle || nearClutter;
   }
 
   /** One jittered tree, optionally solid if it stands inside the play area. */
@@ -528,6 +598,16 @@ export class HubScene {
       node.parent = this.root;
     }
 
+    if (options.centerXZ) {
+      const world = hierarchyBounds(meshes);
+      const dx = x - (world.min.x + world.max.x) / 2;
+      const dz = z - (world.min.z + world.max.z) / 2;
+      for (const node of roots) {
+        node.position.x += dx;
+        node.position.z += dz;
+      }
+    }
+
     for (const mesh of meshes) {
       mesh.receiveShadows = true;
       if (options.shadow !== false) {
@@ -537,7 +617,23 @@ export class HubScene {
     }
 
     if (options.collider) {
-      this.colliders.push(aabbFromCenter(x, z, options.collider.halfX, options.collider.halfZ));
+      // Derive the collision footprint from the settled visual bounds so props
+      // with off-centre pivots do not get offset or undersized colliders.
+      const world = hierarchyBounds(meshes);
+      const halfX = options.collider.fit
+        ? (world.max.x - world.min.x) / 2
+        : options.collider.halfX;
+      const halfZ = options.collider.fit
+        ? (world.max.z - world.min.z) / 2
+        : options.collider.halfZ;
+      this.colliders.push(
+        aabbFromCenter(
+          (world.min.x + world.max.x) / 2,
+          (world.min.z + world.max.z) / 2,
+          halfX,
+          halfZ,
+        ),
+      );
     }
     return meshes;
   }

@@ -119,6 +119,16 @@ export function bowStats(tier: number, charge: number): BowStats {
   };
 }
 
+/** Extra arrow damage from Yew Longbow ranks (0..3). */
+export function longbowDamageMultiplier(longbowRank = 0): number {
+  return 1 + 0.15 * clamp(longbowRank, 0, 3);
+}
+
+/** Fire-cooldown multiplier from Swift Recurve ranks (0..3). */
+export function recurveCooldownMultiplier(recurveRank = 0): number {
+  return Math.pow(0.85, clamp(recurveRank, 0, 3));
+}
+
 export function playerMaxHealth(maxHealthRank: number): number {
   return COMBAT.playerBaseHealth + COMBAT.playerHealthPerRank * clamp(maxHealthRank, 0, 3);
 }

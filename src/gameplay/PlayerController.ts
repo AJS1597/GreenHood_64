@@ -62,6 +62,7 @@ export class PlayerController {
   private readonly tuning: PlayerTuning;
   private readonly settings: PlayerSettings;
   private readonly keys = new Set<string>();
+  private readonly lookButtons = new Set<number>();
   private readonly disposers: Array<() => void> = [];
 
   private x = 0;
@@ -208,10 +209,24 @@ export class PlayerController {
       this.locked = document.pointerLockElement === this.canvas;
       if (!this.locked) {
         this.keys.clear();
+        this.lookButtons.clear();
         this.velocityX = 0;
         this.velocityZ = 0;
       }
       this.onLockChange?.(this.locked);
+    };
+    const onButtonDown = (event: MouseEvent): void => {
+      if (event.button === 0) {
+        return;
+      }
+      // Right/middle clicks should never steer the camera. Browsers can emit a
+      // wild movement delta while both buttons are held, which used to snap the
+      // view upward.
+      this.lookButtons.add(event.button);
+      event.preventDefault();
+    };
+    const onButtonUp = (event: MouseEvent): void => {
+      this.lookButtons.delete(event.button);
     };
     const onContextMenu = (event: MouseEvent): void => {
       event.preventDefault();
@@ -222,7 +237,11 @@ export class PlayerController {
     document.addEventListener('pointermove', onPointerMove);
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('pointerlockchange', onLockChange);
-    this.canvas.addEventListener('contextmenu', onContextMenu);
+    window.addEventListener('mousedown', onButtonDown);
+    window.addEventListener('pointerdown', onButtonDown);
+    window.addEventListener('mouseup', onButtonUp);
+    window.addEventListener('pointerup', onButtonUp);
+    window.addEventListener('contextmenu', onContextMenu);
 
     this.disposers.push(
       () => window.removeEventListener('keydown', onKeyDown),
@@ -230,13 +249,17 @@ export class PlayerController {
       () => document.removeEventListener('pointermove', onPointerMove),
       () => document.removeEventListener('mousemove', onMouseMove),
       () => document.removeEventListener('pointerlockchange', onLockChange),
-      () => this.canvas.removeEventListener('contextmenu', onContextMenu),
+      () => window.removeEventListener('mousedown', onButtonDown),
+      () => window.removeEventListener('pointerdown', onButtonDown),
+      () => window.removeEventListener('mouseup', onButtonUp),
+      () => window.removeEventListener('pointerup', onButtonUp),
+      () => window.removeEventListener('contextmenu', onContextMenu),
     );
   }
 
   /** Apply a look delta (in mouse-pixel units) to yaw/pitch. Mouse and keys share this. */
   private applyLook(movementX: number, movementY: number): void {
-    if (!this.locked) {
+    if (!this.locked || this.lookButtons.size > 0) {
       return;
     }
     const sensitivity = 0.0022 * this.settings.sensitivity;

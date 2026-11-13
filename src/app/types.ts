@@ -1,5 +1,14 @@
 /** Ability identifiers that persist between runs. */
-export type AbilityId = 'forest-step' | 'coin-toss' | 'leaf-cloak' | 'hunters-focus';
+export type AbilityId =
+  | 'forest-step'
+  | 'coin-toss'
+  | 'leaf-cloak'
+  | 'hunters-focus'
+  | 'smoke-veil'
+  | 'keen-eye';
+
+/** Permanent bow attachments sold alongside the bow tiers. */
+export type BowUpgradeId = 'longbow' | 'recurve';
 
 /** Progression currencies. Crowns are the rare tier. */
 export interface Wallet {
@@ -30,6 +39,8 @@ export interface SaveData {
   wallet: Wallet;
   /** Bow tier, 1..5. */
   bowTier: number;
+  /** Ranks for the alternate bow attachments, 0 = not owned. */
+  bowUpgrades: Record<BowUpgradeId, number>;
   /** Ability levels, 0 = locked. */
   abilities: Record<AbilityId, number>;
   /** Training ranks, 0 = untrained. */
